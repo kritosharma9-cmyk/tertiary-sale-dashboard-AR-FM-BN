@@ -157,13 +157,14 @@ def clean_df_for_single_mode(df, b_y):
         cols_to_keep.append(c)
     return df[cols_to_keep]
 
-# 🚀 DATA LOADING & CLEANING LOGIC (ROLE + VIEW BASED)
+# 🚀 DATA LOADING & CLEANING LOGIC (ROLE + VIEW BASED + CACHE)
+@st.cache_data
 def load_role_based_data(role, view_filter="Default"):
     file_ar = "TERTIARY_SALE AR.xlsx"
     file_fm = "TERTIARY_SALE_FM.xlsx"
     
     try:
-        # NAYA LOGIC: Yahan view filter check hoga
+        # View filter check
         if role == "AR" or view_filter == "Only AR Data":
             df = pd.read_excel(file_ar, engine='openpyxl')
         elif role == "FM" or view_filter == "Only FM Data":
@@ -280,7 +281,7 @@ wrapper = "<div style='margin-top: -15px;'>{}</div>"
 st.sidebar.markdown("### 🏢 Access Level")
 st.sidebar.info(f"👤 **User:** {st.session_state.selected_user}\n\n🔒 **Role:** {st.session_state.user_role} Data")
 
-# 🔀 NAYA BUTTON: Jinke paas 'ALL' access hai, unhe ab file choose karne ka option milega
+# 🔀 BUTTON: Jinke paas 'ALL' access hai, unhe ab file choose karne ka option milega
 if st.session_state.user_role == "ALL":
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🔀 Select Data View")
@@ -290,7 +291,7 @@ else:
     view_filter = "Default"
     display_view = f"{st.session_state.user_role} Data Only"
 
-# 🚀 STRICT RAM MEMORY LOCK (Ab ye file selection ke hisaab se cache update karega)
+# 🚀 STRICT RAM MEMORY LOCK 
 if "cached_data" not in st.session_state or st.session_state.get("cached_role") != st.session_state.user_role or st.session_state.get("cached_view") != view_filter:
     with st.spinner("🚀 Loading Data into Fast Cache..."):
         st.session_state.cached_data = load_role_based_data(st.session_state.user_role, view_filter)
@@ -302,6 +303,7 @@ sheet_data = st.session_state.cached_data
 # 🔄 MANUAL RELOAD BUTTON
 if st.sidebar.button("🔄 Force Reload / Refresh Data", use_container_width=True):
     with st.spinner("🔄 Refreshing Data into Fast Cache..."):
+        st.cache_data.clear() # Kachra saaf karne wala naya code
         st.session_state.cached_data = load_role_based_data(st.session_state.user_role, view_filter)
     st.rerun()
 st.sidebar.caption("💡 Data naya dekhne ke liye 'Force Reload' dabayein. Excel file GitHub Desktop se Push karein.")
