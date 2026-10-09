@@ -12,11 +12,15 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Tertiary Sale Dashboard", layout="wide", page_icon="📈")
 
 # ==========================================
-# 🔒 SECURITY ACCESS SYSTEM
+# 🔒 VIP SECURITY ACCESS SYSTEM & ROLE LOGIC
 # ==========================================
 def check_password():
     if "password_correct" not in st.session_state:
         st.session_state.password_correct = False
+    if "user_role" not in st.session_state:
+        st.session_state.user_role = None
+    if "selected_user" not in st.session_state:
+        st.session_state.selected_user = None
 
     if st.session_state.password_correct:
         return True
@@ -26,12 +30,33 @@ def check_password():
     
     with col2:
         with st.container(border=True):
-            st.markdown("<h2 style='text-align: center;'>🔐 Dashboard Login</h2>", unsafe_allow_html=True)
-            user_password = st.text_input("Enter Security Password:", type="password")
+            st.markdown("<h2 style='text-align: center;'>🔐 Secure Dashboard Login</h2>", unsafe_allow_html=True)
+            
+            # Users, Unke Password aur Unka Access Role
+            USER_CREDENTIALS = {
+                "1. BOSS": {"password": "BOSS@123", "role": "ALL"},
+                "2. CHAUHAN SIR": {"password": "CHAUHAN@123", "role": "ALL"},
+                "3. MUNIT": {"password": "MUNIT@123", "role": "ALL"},
+                "4. AJAY": {"password": "AJAY@123", "role": "ALL"},
+                "5. ABHISHEK": {"password": "ABHI@123", "role": "ALL"},
+                "6. RAVINDER": {"password": "RAVI@123", "role": "ALL"},
+                "7. BARINDER (ASM)": {"password": "BARINDER@123", "role": "AR"},
+                "8. RAJESH SINGH (ASM)": {"password": "RAJESH@123", "role": "FM"},
+                "9. SULBH (RSM)": {"password": "SULBH@123", "role": "FM"},
+                "10. ABHISHEK (RSM)": {"password": "ABHI@123", "role": "AR"} 
+            }
+            
+            usernames_list = ["-- Apna Naam Select Karein --"] + list(USER_CREDENTIALS.keys())
+            sel_user = st.selectbox("👤 Username:", usernames_list)
+            user_password = st.text_input("🔑 Enter Security Password:", type="password")
             
             if st.button("Login 🚀", use_container_width=True):
-                if user_password == "Boss@123":
+                if sel_user == "-- Apna Naam Select Karein --":
+                    st.warning("⚠️ Kripya apna Username select karein.")
+                elif user_password == USER_CREDENTIALS[sel_user]["password"]:
                     st.session_state.password_correct = True
+                    st.session_state.user_role = USER_CREDENTIALS[sel_user]["role"]
+                    st.session_state.selected_user = sel_user
                     st.rerun()
                 else:
                     st.error("❌ Invalid Password")
@@ -44,6 +69,7 @@ if not check_password():
 # 📊 MAIN DASHBOARD
 # ==========================================
 st.title("Tertiary Sale Dashboard 📊")
+st.markdown(f"**Data View:** `{st.session_state.user_role} Data` | **Logged in as:** `{st.session_state.selected_user}`")
 
 # ==========================================
 # 📆 GLOBAL SCOPE: DYNAMIC TIME & SEQUENCE LOGIC
@@ -137,13 +163,23 @@ def clean_df_for_single_mode(df, b_y):
         cols_to_keep.append(c)
     return df[cols_to_keep]
 
-# 🚀 MEMORY LOCK FUNCTION: Default @st.cache_data hata diya gaya hai
-# Data ab baar-baar background mein check nahi hoga jisse processing fast rahegi.
-def load_data(file_name):
+# 🚀 DATA LOADING & CLEANING LOGIC (ROLE BASED)
+def load_role_based_data(role):
+    file_ar = "TERTIARY_SALE AR.xlsx"
+    file_fm = "TERTIARY_SALE_FM.xlsx"
+    
     try:
-        df = pd.read_excel(file_name, engine='openpyxl')
+        if role == "AR":
+            df = pd.read_excel(file_ar, engine='openpyxl')
+        elif role == "FM":
+            df = pd.read_excel(file_fm, engine='openpyxl')
+        else: 
+            # ALL - Combine both
+            df_ar = pd.read_excel(file_ar, engine='openpyxl')
+            df_fm = pd.read_excel(file_fm, engine='openpyxl')
+            df = pd.concat([df_ar, df_fm], ignore_index=True)
     except FileNotFoundError:
-        st.error(f"⚠️ {file_name} nahi mili.")
+        st.error(f"❌ Excel file nahi mili! Kripya check karein ki '{file_ar}' aur '{file_fm}' dono GitHub par upload ho chuki hain.")
         st.stop()
         
     df.columns = df.columns.str.strip().str.upper()
@@ -156,7 +192,8 @@ def load_data(file_name):
 
     df['BILLDATE'] = pd.to_datetime(df['BILLDATE'], errors='coerce').fillna(pd.to_datetime('2000-01-01'))
     df['MONTH_NAME'] = df['BILLDATE'].dt.strftime('%B')
-    df['YEAR2'] = df['YEAR2'].astype(str)
+    if 'YEAR2' in df.columns:
+        df['YEAR2'] = df['YEAR2'].astype(str)
     
     text_cols = ['FORMAL/CASUAL', 'EOSS/FRESH', 'SEASON', 'FIT', 'CATEGORY', 'MANAGER', 'STATE', 'STATUS', 'CUSTOMERNAMEACTIVE']
     for col in text_cols:
@@ -175,6 +212,17 @@ def load_data(file_name):
         df.loc[mask_anomaly, 'QTY'] = 0
         for dc in disc_like_cols:
             df.loc[mask_anomaly, dc] = 0
+            
+    # --- CATEGORY EXCLUDE KARNE KA LOGIC ---
+    exclude_items = [
+        "ARROW-MENS WESTERN-COMBO SET",
+        "DUFFEL TROLLEY BAG",
+        "DUFFLE BAG",
+        "LAPTOP BACKPACK",
+        "TROLLEY BAG"
+    ]
+    if 'CATEGORY' in df.columns:
+        df = df[~df['CATEGORY'].isin(exclude_items)]
             
     return df
 
@@ -227,77 +275,26 @@ def make_fy_html(val_str, gr_val, label, is_disc=False):
 wrapper = "<div style='margin-top: -15px;'>{}</div>"
 
 # ==========================================
-# 🏢 BRAND / FILE SELECTOR & FAST CACHE SYSTEM
+# 🏢 CACHE SYSTEM & SIDEBAR MENU
 # ==========================================
-st.sidebar.markdown("### 🏢 Brand / Data Source")
-available_files = [f for f in os.listdir() if f.endswith('.xlsx') and not f.startswith('~') and not f.startswith('backup_')]
+st.sidebar.markdown("### 🏢 Access Level")
+st.sidebar.info(f"👤 **User:** {st.session_state.selected_user}\n\n🔒 **Role:** {st.session_state.user_role} Data")
 
-if not available_files:
-    st.error("⚠️ Koi Excel (.xlsx) file nahi mili is folder mein! Kripya Excel files upload karein.")
-    st.stop()
-
-selected_file = st.sidebar.selectbox("Select Excel File:", available_files)
-
-# 🚀 STRICT RAM MEMORY LOCK: Jab tak explicitly reload na bola jaye, data cache mein locked rahega
-if "cached_data" not in st.session_state or st.session_state.get("cached_file") != selected_file:
-    with st.spinner("🚀 Loading Data into Fast Cache..."):
-        st.session_state.cached_data = load_data(selected_file)
-        st.session_state.cached_file = selected_file
+# 🚀 STRICT RAM MEMORY LOCK
+if "cached_data" not in st.session_state or st.session_state.get("cached_role") != st.session_state.user_role:
+    with st.spinner("🚀 Loading & Merging Data into Fast Cache..."):
+        st.session_state.cached_data = load_role_based_data(st.session_state.user_role)
+        st.session_state.cached_role = st.session_state.user_role
 
 sheet_data = st.session_state.cached_data
 
 # 🔄 MANUAL RELOAD BUTTON
 if st.sidebar.button("🔄 Force Reload / Refresh Data", use_container_width=True):
     with st.spinner("🔄 Refreshing Data into Fast Cache..."):
-        st.session_state.cached_data = load_data(selected_file)
+        st.session_state.cached_data = load_role_based_data(st.session_state.user_role)
     st.rerun()
-st.sidebar.caption("Data RAM mein locked hai (Super Fast). Naya data dekhne ke liye 'Force Reload' dabayein.")
+st.sidebar.caption("💡 Data naya dekhne ke liye 'Force Reload' dabayein. Excel file GitHub Desktop se Push karein.")
 
-# ==========================================
-# 📤 APPEND / UPDATE NEW DATA IN SELECTED FILE
-# ==========================================
-st.sidebar.markdown("---")
-st.sidebar.markdown(f"### 📤 Add New Sales to: {selected_file}")
-st.sidebar.caption("Yahan nayi Excel upload karein. Iska data upar select ki gayi file mein automatic add ho jayega.")
-
-backup_file = f"backup_{selected_file}"
-uploaded_file = st.sidebar.file_uploader("Upload New Month Sales (.xlsx)", type=['xlsx'])
-
-if uploaded_file is not None:
-    if st.sidebar.button("Merge & Update Data 🚀", use_container_width=True):
-        try:
-            with st.spinner('Data merge ho raha hai...'):
-                shutil.copyfile(selected_file, backup_file)
-                df_existing = pd.read_excel(selected_file, engine='openpyxl')
-                df_new = pd.read_excel(uploaded_file, engine='openpyxl')
-                df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-                df_combined.drop_duplicates(inplace=True)
-                df_combined.to_excel(selected_file, index=False, engine='openpyxl')
-                
-                # Update Strict Cache after merge
-                st.session_state.cached_data = load_data(selected_file)
-                
-            st.sidebar.success(f"✅ Nayi sale ka data '{selected_file}' mein successfully add ho gaya!")
-            st.rerun()
-            
-        except Exception as e:
-            st.sidebar.error(f"❌ Error aaya: {e}")
-
-if os.path.exists(backup_file):
-    st.sidebar.markdown("---")
-    st.sidebar.warning("⚠️ Kya aapse galat file update ho gayi thi?")
-    if st.sidebar.button("Undo Last Upload ↩️ (Restore)", use_container_width=True):
-        try:
-            shutil.copyfile(backup_file, selected_file)
-            os.remove(backup_file)
-            
-            # Revert Strict Cache to old state
-            st.session_state.cached_data = load_data(selected_file)
-            
-            st.sidebar.success("✅ Undo successful! Purana data wapas aa gaya hai.")
-            st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"❌ Undo fail ho gaya: {e}")
 
 # ==========================================
 # 🔍 SIDEBAR FILTERS FORM
@@ -402,12 +399,7 @@ with st.sidebar.form(key='global_filter_form'):
     for col in filter_cols:
         if col in sheet_data.columns:
             unique_vals = sorted([str(x) for x in sheet_data[col].dropna().unique()])
-            default_vals = None
-            if col == 'CATEGORY':
-                exclude_cats = ['BAGS DUFFLE BAG', 'BAGS', 'SUITCOVERS', 'TROLLEY BAG', 'DUFFLE BAG', 'BAG-LEATHERS']
-                default_vals = [c for c in unique_vals if c not in exclude_cats]
-                
-            selected_filters[col] = st.multiselect(f"Filter by {col.replace('_', ' ').title()}:", unique_vals, default=default_vals)
+            selected_filters[col] = st.multiselect(f"Filter by {col.replace('_', ' ').title()}:", unique_vals, default=None)
             
     submit_button = st.form_submit_button(label='Apply Filters 🚀', use_container_width=True)
 
