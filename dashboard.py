@@ -42,7 +42,7 @@ def check_password():
                 "6. RAVINDER": {"password": "RAVI@123", "role": "ALL"},
                 "7. BARINDER (ASM)": {"password": "BARINDER@123", "role": "AR"},
                 "8. RAJESH SINGH (ASM)": {"password": "RAJESH@123", "role": "FM"},
-                "9. SULBH (RSM)": {"password": "SULBH@123", "role": "FM"},
+                "9. SULABH (RSM)": {"password": "SULABH@123", "role": "FM"},
                 "10. ABHISHEK (RSM)": {"password": "ABHI@123", "role": "AR"} 
             }
             
@@ -64,12 +64,6 @@ def check_password():
 
 if not check_password():
     st.stop()
-
-# ==========================================
-# 📊 MAIN DASHBOARD
-# ==========================================
-st.title("Tertiary Sale Dashboard 📊")
-st.markdown(f"**Data View:** `{st.session_state.user_role} Data` | **Logged in as:** `{st.session_state.selected_user}`")
 
 # ==========================================
 # 📆 GLOBAL SCOPE: DYNAMIC TIME & SEQUENCE LOGIC
@@ -163,21 +157,23 @@ def clean_df_for_single_mode(df, b_y):
         cols_to_keep.append(c)
     return df[cols_to_keep]
 
-# 🚀 DATA LOADING & CLEANING LOGIC (ROLE BASED)
-def load_role_based_data(role):
+# 🚀 DATA LOADING & CLEANING LOGIC (ROLE + VIEW BASED)
+def load_role_based_data(role, view_filter="Default"):
     file_ar = "TERTIARY_SALE AR.xlsx"
     file_fm = "TERTIARY_SALE_FM.xlsx"
     
     try:
-        if role == "AR":
+        # NAYA LOGIC: Yahan view filter check hoga
+        if role == "AR" or view_filter == "Only AR Data":
             df = pd.read_excel(file_ar, engine='openpyxl')
-        elif role == "FM":
+        elif role == "FM" or view_filter == "Only FM Data":
             df = pd.read_excel(file_fm, engine='openpyxl')
         else: 
-            # ALL - Combine both
+            # ALL - Combine both files
             df_ar = pd.read_excel(file_ar, engine='openpyxl')
             df_fm = pd.read_excel(file_fm, engine='openpyxl')
             df = pd.concat([df_ar, df_fm], ignore_index=True)
+            
     except FileNotFoundError:
         st.error(f"❌ Excel file nahi mili! Kripya check karein ki '{file_ar}' aur '{file_fm}' dono GitHub par upload ho chuki hain.")
         st.stop()
@@ -213,22 +209,18 @@ def load_role_based_data(role):
         for dc in disc_like_cols:
             df.loc[mask_anomaly, dc] = 0
             
-# --- CATEGORY EXCLUDE KARNE KA LOGIC ---
+    # --- CATEGORY EXCLUDE KARNE KA LOGIC (Nayi aur Purani Dono Shaamil Hain) ---
     exclude_items = [
-        # Nayi Categories
         "ARROW-MENS WESTERN-COMBO SET",
         "DUFFEL TROLLEY BAG",
         "DUFFLE BAG",
         "LAPTOP BACKPACK",
         "TROLLEY BAG",
-        
-        # Purani Categories
         "BAGS DUFFLE BAG",
         "BAGS",
         "SUITCOVERS",
         "BAG-LEATHERS"
     ]
-    
     if 'CATEGORY' in df.columns:
         df = df[~df['CATEGORY'].isin(exclude_items)]
             
@@ -288,21 +280,38 @@ wrapper = "<div style='margin-top: -15px;'>{}</div>"
 st.sidebar.markdown("### 🏢 Access Level")
 st.sidebar.info(f"👤 **User:** {st.session_state.selected_user}\n\n🔒 **Role:** {st.session_state.user_role} Data")
 
-# 🚀 STRICT RAM MEMORY LOCK
-if "cached_data" not in st.session_state or st.session_state.get("cached_role") != st.session_state.user_role:
-    with st.spinner("🚀 Loading & Merging Data into Fast Cache..."):
-        st.session_state.cached_data = load_role_based_data(st.session_state.user_role)
+# 🔀 NAYA BUTTON: Jinke paas 'ALL' access hai, unhe ab file choose karne ka option milega
+if st.session_state.user_role == "ALL":
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🔀 Select Data View")
+    view_filter = st.sidebar.radio("Aap kaunsi file dekhna chahte hain?", ["Combined (AR + FM)", "Only AR Data", "Only FM Data"])
+    display_view = view_filter
+else:
+    view_filter = "Default"
+    display_view = f"{st.session_state.user_role} Data Only"
+
+# 🚀 STRICT RAM MEMORY LOCK (Ab ye file selection ke hisaab se cache update karega)
+if "cached_data" not in st.session_state or st.session_state.get("cached_role") != st.session_state.user_role or st.session_state.get("cached_view") != view_filter:
+    with st.spinner("🚀 Loading Data into Fast Cache..."):
+        st.session_state.cached_data = load_role_based_data(st.session_state.user_role, view_filter)
         st.session_state.cached_role = st.session_state.user_role
+        st.session_state.cached_view = view_filter
 
 sheet_data = st.session_state.cached_data
 
 # 🔄 MANUAL RELOAD BUTTON
 if st.sidebar.button("🔄 Force Reload / Refresh Data", use_container_width=True):
     with st.spinner("🔄 Refreshing Data into Fast Cache..."):
-        st.session_state.cached_data = load_role_based_data(st.session_state.user_role)
+        st.session_state.cached_data = load_role_based_data(st.session_state.user_role, view_filter)
     st.rerun()
 st.sidebar.caption("💡 Data naya dekhne ke liye 'Force Reload' dabayein. Excel file GitHub Desktop se Push karein.")
 
+
+# ==========================================
+# 📊 MAIN DASHBOARD (Yahan par selected file ka naam dikhega)
+# ==========================================
+st.title("Tertiary Sale Dashboard 📊")
+st.markdown(f"**Active View:** `{display_view}` | **Logged in as:** `{st.session_state.selected_user}`")
 
 # ==========================================
 # 🔍 SIDEBAR FILTERS FORM
@@ -479,7 +488,6 @@ if selected_bill_col in filtered_df.columns and 'CUSTOMERNAMEACTIVE' in filtered
         filtered_df[selected_bill_col].astype(str).str.strip()
     )
 else:
-    # Fallback agar column missing ho
     filtered_df['UNIQUE_BILL_ID'] = filtered_df['BILLDATE'].astype(str)
 
 # Global FY Year Definition
