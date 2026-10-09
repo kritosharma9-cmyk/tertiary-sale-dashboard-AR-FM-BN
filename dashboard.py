@@ -213,14 +213,22 @@ def load_role_based_data(role):
         for dc in disc_like_cols:
             df.loc[mask_anomaly, dc] = 0
             
-    # --- CATEGORY EXCLUDE KARNE KA LOGIC ---
+# --- CATEGORY EXCLUDE KARNE KA LOGIC ---
     exclude_items = [
+        # Nayi Categories
         "ARROW-MENS WESTERN-COMBO SET",
         "DUFFEL TROLLEY BAG",
         "DUFFLE BAG",
         "LAPTOP BACKPACK",
-        "TROLLEY BAG"
+        "TROLLEY BAG",
+        
+        # Purani Categories
+        "BAGS DUFFLE BAG",
+        "BAGS",
+        "SUITCOVERS",
+        "BAG-LEATHERS"
     ]
+    
     if 'CATEGORY' in df.columns:
         df = df[~df['CATEGORY'].isin(exclude_items)]
             
