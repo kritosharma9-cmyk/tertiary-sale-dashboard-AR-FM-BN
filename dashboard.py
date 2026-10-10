@@ -232,21 +232,23 @@ def load_data(file_name):
             df[col] = df[col].str.replace(r'\s+', ' ', regex=True)
             df[col] = df[col].str.strip().str.upper()
             
-    if 'CUSTOMERNAMEACTIVE' in df.columns:
+   if 'CUSTOMERNAMEACTIVE' in df.columns:
         current_time = datetime.now()
         mask_anomaly = (df['CUSTOMERNAMEACTIVE'].str.contains('MOM', na=False)) & \
                        ((df['BILLDATE'].dt.year > current_time.year) | \
                         ((df['BILLDATE'].dt.year == current_time.year) & (df['BILLDATE'].dt.month > current_time.month)))
-        
         df.loc[mask_anomaly, 'SALEVAL'] = 0
         df.loc[mask_anomaly, 'QTY'] = 0
-for dc in disc_like_cols:
+        for dc in disc_like_cols:
             df.loc[mask_anomaly, dc] = 0
-            
-    # 🚫 CATEGORY EXCLUDE LOGIC
-    exclude_items = ["BAGS DUFFLE BAG", "BAGS", "SUITCOVERS", "TROLLEY BAG", "DUFFLE BAG", "BAG-LEATHERS","ARROW-MENS WESTERN-COMBO SET","DUFFEL TROLLEY BAG","LAPTOP BACKPACK"]
+
+    exclude_items = ["BAGS DUFFLE BAG", "BAGS", "SUITCOVERS", "TROLLEY BAG", "DUFFLE BAG", "BAG-LEATHERS", "ARROW-MENS WESTERN-COMBO SET", "DUFFEL TROLLEY BAG", "LAPTOP BACKPACK"]
     if 'CATEGORY' in df.columns:
         df = df[~df['CATEGORY'].isin(exclude_items)]
+        
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            df[col] = df[col].astype(str)
             
     return df
 def style_dataframe(df):
