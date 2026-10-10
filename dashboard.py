@@ -101,7 +101,7 @@ while len(months_to_show) < 4:
 # Custom CSS for Tabs, Top Menu Hide & Print Layout
 st.markdown("""
 <style>
-    /* 🚀 TOP MENU, SHARE AUR GITHUB ICON GAYAB */
+    /* TOP MENU, SHARE AUR GITHUB ICON GAYAB */
     [data-testid="stToolbar"] {visibility: hidden !important;}
     [data-testid="stHeader"] {visibility: hidden !important;}
     #MainMenu {visibility: hidden !important;}
@@ -145,7 +145,6 @@ def to_excel(df):
         df.to_excel(writer, index=False, sheet_name='Data')
     return output.getvalue()
 
-# Premium Indian Lakhs/Crores Comma Formatting Function
 def format_indian_num(val, is_currency=False, prefix="₹"):
     if not isinstance(val, (int, float, np.number)) or pd.isna(val):
         return str(val)
@@ -173,7 +172,7 @@ def clean_df_for_single_mode(df, b_y):
         cols_to_keep.append(c)
     return df[cols_to_keep]
 
-# 🚀 DATA LOADING & CLEANING LOGIC
+# 🚀 DATA LOADING & CLEANING LOGIC (ROLE + VIEW BASED + CACHE)
 @st.cache_data
 def load_role_based_data(role, view_filter="Default"):
     file_ar = "TERTIARY_SALE AR.xlsx"
@@ -226,7 +225,7 @@ def load_role_based_data(role, view_filter="Default"):
         for dc in disc_like_cols:
             df.loc[mask_anomaly, dc] = 0
             
-    # --- CATEGORY EXCLUDE KARNE KA LOGIC ---
+    # --- CATEGORY EXCLUDE KARNE KA LOGIC (Nayi aur Purani Dono Shaamil Hain) ---
     exclude_items = [
         "ARROW-MENS WESTERN-COMBO SET",
         "DUFFEL TROLLEY BAG",
@@ -292,33 +291,35 @@ def make_fy_html(val_str, gr_val, label, is_disc=False):
 wrapper = "<div style='margin-top: -15px;'>{}</div>"
 
 # ==========================================
-# 🎛️ TOP FILTERS SECTION (Moved from Sidebar)
+# 🎛️ TOP FILTERS SECTION (Side Panel Ab Upar Shift Ho Gaya Hai)
 # ==========================================
 users_df = get_users_db()
 current_user_row = users_df[users_df['Username'] == st.session_state.selected_user].iloc[0]
 allowed_columns_str = current_user_row['Allowed_Columns']
 
 st.title("Tertiary Sale Dashboard 📊")
-st.markdown(f"**👤 User:** `{st.session_state.selected_user}` | **Role:** `{st.session_state.user_role}`")
+st.markdown(f"**👤 Logged in as:** `{st.session_state.selected_user}` | **🔒 Role:** `{st.session_state.user_role}`")
 
-with st.expander("🛠️ GLOBAL FILTERS & DATA CONTROLS (Click to Expand/Collapse)", expanded=True):
-    with st.form(key='top_filter_form'):
-        f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+with st.expander("🛠️ GLOBAL FILTERS & CONTROLS (Click to Expand)", expanded=True):
+    with st.form(key='global_filter_form'):
+        
+        # Row 1 of Top Panel (Access, Comparison & Preset)
+        f_col1, f_col2, f_col3 = st.columns(3)
         
         with f_col1:
+            st.markdown("**1. Data View Options**")
             if st.session_state.user_role in ["ALL", "ADMIN"]:
-                view_filter = st.selectbox("🔀 Select Data View:", ["Combined (AR + FM)", "Only AR Data", "Only FM Data"])
-                display_view = view_filter
+                view_filter = st.selectbox("🔀 Select Data View:", ["Combined (AR + FM)", "Only AR Data", "Only FM Data"], label_visibility="collapsed")
             else:
                 view_filter = "Default"
-                display_view = f"{st.session_state.user_role} Data Only"
-                st.info(f"Fixed View: {st.session_state.user_role}")
+                st.info(f"Fixed View: {st.session_state.user_role} Data")
                 
-        with f_col2:
             compare_mode = st.checkbox("🔄 Enable Comparison (LY)", value=True)
-            shortcut = st.selectbox("⚡ Quick Range Shortcut:", ["None (Use Custom Dates)", "This Month", "Last Month", "Year-to-Date (YTD)"])
             
-        with f_col3:
+        with f_col2:
+            st.markdown("**2. Target Period (TY)**")
+            shortcut = st.selectbox("⚡ Quick Range Shortcut:", ["None (Use Custom Dates)", "This Month", "Last Month", "Year-to-Date (YTD)"], label_visibility="collapsed")
+            
             if shortcut == "This Month": def_ty_start, def_ty_end = today.replace(day=1), today
             elif shortcut == "Last Month": 
                 def_ty_end = today.replace(day=1) - timedelta(days=1)
@@ -326,18 +327,23 @@ with st.expander("🛠️ GLOBAL FILTERS & DATA CONTROLS (Click to Expand/Collap
             elif shortcut == "Year-to-Date (YTD)": def_ty_start, def_ty_end = datetime(today.year if today.month >= 4 else today.year - 1, 4, 1), today
             else: def_ty_start, def_ty_end = datetime(today.year, today.month, 1), today
             
-            ty_start = st.date_input("Start Date (TY)", def_ty_start)
-            ty_end = st.date_input("End Date (TY)", def_ty_end)
+            ty_cols = st.columns(2)
+            ty_start = ty_cols[0].date_input("Start Date (TY)", def_ty_start)
+            ty_end = ty_cols[1].date_input("End Date (TY)", def_ty_end)
             
-        with f_col4:
+        with f_col3:
+            st.markdown("**3. Base Period (LY)**")
             if compare_mode:
                 try: ly_start_default = ty_start.replace(year=ty_start.year - 1)
                 except ValueError: ly_start_default = ty_start.replace(year=ty_start.year - 1, day=28)
                 try: ly_end_default = ty_end.replace(year=ty_end.year - 1)
                 except ValueError: ly_end_default = ty_end.replace(year=ty_end.year - 1, day=28)
-                ly_start = st.date_input("Start Date (LY)", ly_start_default)
-                ly_end = st.date_input("End Date (LY)", ly_end_default)
+                
+                ly_cols = st.columns(2)
+                ly_start = ly_cols[0].date_input("Start Date (LY)", ly_start_default)
+                ly_end = ly_cols[1].date_input("End Date (LY)", ly_end_default)
             else:
+                st.info("Comparison mode is disabled.")
                 ly_start, ly_end = ty_start, ty_end
 
         # Load data block inside form
@@ -351,6 +357,8 @@ with st.expander("🛠️ GLOBAL FILTERS & DATA CONTROLS (Click to Expand/Collap
 
         st.markdown("---")
         
+        # Row 2 of Top Panel (Columns & Customer Search)
+        st.markdown("**4. Columns & Global Search**")
         c_f1, c_f2, c_f3 = st.columns(3)
         
         with c_f1:
@@ -361,6 +369,7 @@ with st.expander("🛠️ GLOBAL FILTERS & DATA CONTROLS (Click to Expand/Collap
                     guess_idx = i; break
             selected_bill_col = st.selectbox("🧾 Select Bill/Invoice Column:", all_columns, index=guess_idx)
             
+        with c_f2:
             possible_disc_cols = [c for c in all_columns if any(k in c for k in ['DISC', 'DISCOUNT'])]
             if possible_disc_cols:
                 guess_disc = 0
@@ -369,20 +378,26 @@ with st.expander("🛠️ GLOBAL FILTERS & DATA CONTROLS (Click to Expand/Collap
                 selected_disc_col = st.selectbox("🏷️ Select Discount Column:", possible_disc_cols, index=guess_disc)
             else: selected_disc_col = None
             
+        with c_f3:
             search_cust = st.text_input("🔍 Search Customer Name:").strip().upper()
 
+        st.markdown("---")
+        
+        # Row 3 of Top Panel (Dropdown Filters side-by-side)
+        st.markdown("**5. Primary Filters**")
         filter_cols = ['MONTH_NAME', 'CUSTOMERNAMEACTIVE', 'MANAGER', 'CATEGORY', 'FIT', 'SEASON', 'STATE', 'STATUS', 'EOSS/FRESH', 'FORMAL/CASUAL']
         selected_filters = {}
         
+        f_cols = st.columns(5)
         for idx, col in enumerate(filter_cols):
             if col in sheet_data.columns:
                 unique_vals = sorted([str(x) for x in sheet_data[col].dropna().unique()])
-                if idx % 2 == 0: selected_filters[col] = c_f2.multiselect(f"Filter by {col.replace('_', ' ').title()}:", unique_vals, default=None)
-                else: selected_filters[col] = c_f3.multiselect(f"Filter by {col.replace('_', ' ').title()}:", unique_vals, default=None)
+                selected_filters[col] = f_cols[idx % 5].multiselect(f"{col.replace('_', ' ').title()}:", unique_vals, default=None)
 
-        submit_button = st.form_submit_button(label='🚀 Apply All Filters & Render', use_container_width=True)
+        st.markdown("---")
+        submit_button = st.form_submit_button(label='🚀 Apply All Filters & Render Dashboard', use_container_width=True)
 
-# Quick Action Buttons
+# Quick Action Buttons placed right under the expander
 btn1, btn2, btn3 = st.columns([1,1,4])
 if btn1.button("🔄 Force Refresh Cache", use_container_width=True):
     st.cache_data.clear()
@@ -392,7 +407,9 @@ if btn2.button("🖨️ Save Dashboard as PDF", use_container_width=True):
     st.components.v1.html("<script>window.parent.print();</script>", height=0)
 
 
-# Application of Filters
+# ==========================================
+# ⚙️ DATA PROCESSING (Filter Application)
+# ==========================================
 filtered_df = sheet_data.copy()
 
 if search_cust:
@@ -501,10 +518,7 @@ gross_g_b = abs(s_base) + disc_g_b
 disc_pct_g_c = (disc_g_c / gross_g_c * 100) if gross_g_c > 0 else 0
 disc_pct_g_b = (disc_g_b / gross_g_b * 100) if gross_g_b > 0 else 0
 
-
-# ==========================================
-# 🔥 FULL FY HISTORY CALCULATION LOGIC 
-# ==========================================
+# FULL FY HISTORY CALCULATION LOGIC 
 temp_fy_all = filtered_df.copy()
 
 agg_funcs = {'SALEVAL': 'sum', 'QTY': 'sum'}
@@ -560,13 +574,7 @@ for fy_year, row in fy_hist.iterrows():
     aqv_html += make_fy_html(format_indian_num(row['Avg Qty Value'], True), row['AQV Gr(%)'], fy_lbl)
     upt_html += make_fy_html(f"{row['UPT']:.2f}", row['UPT Gr(%)'], fy_lbl)
 
-wrapper = "<div style='margin-top: -15px;'>{}</div>"
-
-# ==========================================
-# 🔥 UI RENDERING (YTD + INLINE HISTORY)
-# ==========================================
 r1_c1, r1_c2, r1_c3, r1_c4, r1_c5 = st.columns(5)
-
 r1_c1.metric(label="Total Sale", value=format_indian_num(s_comp, True), delta=f"{calc_growth(s_base, s_comp):.1f}% (LY: {format_indian_num(s_base, True)})" if compare_mode else None)
 if compare_mode: r1_c1.markdown(wrapper.format(sale_html), unsafe_allow_html=True)
 
@@ -585,10 +593,9 @@ if compare_mode: r1_c5.markdown(wrapper.format(disc_html), unsafe_allow_html=Tru
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# --- PER DAY & PER MONTH CALCULATION ---
+# PER DAY & PER MONTH CALCULATION
 days_ty = max(1, (ty_end_dt - ty_start_dt).days + 1)
 days_ly = max(1, (ly_end_dt - ly_start_dt).days + 1) if compare_mode else 1
-
 per_day_comp = s_comp / days_ty
 per_day_base = s_base / days_ly if compare_mode else 0
 
@@ -650,7 +657,6 @@ if compare_mode: r2_c4.markdown(wrapper.format(aqv_html), unsafe_allow_html=True
 r2_c5.metric(label="Unit Per Transaction", value=f"{upt_comp:.2f}", delta=f"{calc_growth(upt_base, upt_comp):.1f}% (LY: {upt_base:.2f})" if compare_mode else None)
 if compare_mode: r2_c5.markdown(wrapper.format(upt_html), unsafe_allow_html=True)
 
-
 # 🆕 COMPACT SEASON-WISE PERFORMANCE
 if 'SEASON' in filtered_df.columns:
     st.markdown("<br>", unsafe_allow_html=True)
@@ -661,7 +667,6 @@ if 'SEASON' in filtered_df.columns:
         season_full = filtered_df.groupby('SEASON').agg({'SALEVAL': 'sum', 'QTY': 'sum'})
         
         all_seasons = pd.DataFrame({'SEASON': season_full.index})
-        
         ss_seasons = all_seasons[all_seasons['SEASON'].str.contains('SS', na=False, case=False)].sort_values('SEASON', ascending=False).head(5)['SEASON'].tolist()
         aw_seasons = all_seasons[all_seasons['SEASON'].str.contains('AW', na=False, case=False)].sort_values('SEASON', ascending=False).head(5)['SEASON'].tolist()
         
@@ -694,9 +699,7 @@ down_col1, down_col2, down_col3 = st.columns([1,2,1])
 with down_col2:
     st.download_button("📥 DOWNLOAD YTD REPORT", data=to_excel(df_ytd_global), file_name="Report.xlsx", mime="application/vnd.ms-excel", use_container_width=True)
 
-# ==========================================
-# 🔥 MONTH-WISE RESTRUCTURED BREAKDOWN WITH ALL HISTORICAL YEARS INLINE
-# ==========================================
+# MONTH-WISE RESTRUCTURED BREAKDOWN WITH ALL HISTORICAL YEARS INLINE
 st.markdown("---")
 st.markdown(f"### 📅 Month-wise Analytics Breakdown")
 
@@ -818,7 +821,9 @@ else:
             
 st.markdown("---")
 
-# Navigation setup - Dynamic Based on User Role
+# ==========================================
+# 📅 TABS RENDERING ROUTERS
+# ==========================================
 tabs_list = [
     "📅 Selected Range Analytics Summary", "📊 Analytics Summary", "🚀 Store Growth Deep-Dive", "📈 YoY Growth", "📅 Week-wise Analysis",
     "👕 Attributes", "👥 Customer Performance", "📅 Customer Month Analysis", 
@@ -846,17 +851,7 @@ def make_professional_chart(fig, title_text, is_pie=False):
         yaxis=dict(tickfont=dict(size=14), title_font=dict(size=16, weight='bold'), tickformat='.0f')
     )
     if is_pie:
-        fig.update_layout(
-            showlegend=True,
-            legend=dict(
-                font=dict(size=12),
-                orientation="v",         
-                yanchor="middle",        
-                y=0.5,                   
-                xanchor="left",
-                x=1.02                   
-            )
-        )
+        fig.update_layout(showlegend=True, legend=dict(font=dict(size=12), orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02))
     else:
         fig.update_layout(legend=dict(font=dict(size=13), orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         fig.update_traces(textposition='outside', textfont=dict(size=13, weight='bold'))
@@ -864,11 +859,8 @@ def make_professional_chart(fig, title_text, is_pie=False):
 
 def render_analytics(df_source, tab_key_prefix, is_ytd=False):
     plot_df = df_source[df_source['YEAR2'].isin([base_y, comp_y])].copy()
-    
-    if not plot_df.empty:
-        m_seq = plot_df.sort_values('BILLDATE')['MONTH_NAME'].unique().tolist()
-    else:
-        m_seq = m_sequence
+    if not plot_df.empty: m_seq = plot_df.sort_values('BILLDATE')['MONTH_NAME'].unique().tolist()
+    else: m_seq = m_sequence
 
     if 'STATUS' in plot_df.columns:
         stat_df = plot_df[plot_df['YEAR2'] == comp_y].groupby('STATUS')['CUSTOMERNAMEACTIVE'].nunique().reset_index()
@@ -880,12 +872,10 @@ def render_analytics(df_source, tab_key_prefix, is_ytd=False):
     s_tot = cust_sum_df['VALUE'].sum()
     
     def build_pie_mappings(df_segment):
-        inside_lbls = []
-        legend_lbls = []
+        inside_lbls, legend_lbls = [], []
         for _, r in df_segment.iterrows():
             p_pct = (r['VALUE'] / s_tot * 100) if s_tot > 0 else 0
-            v_str = format_indian_num(r['VALUE'], False)
-            q_str = format_indian_num(r['QTY'], False)
+            v_str, q_str = format_indian_num(r['VALUE'], False), format_indian_num(r['QTY'], False)
             inside_lbls.append(f"₹{v_str}<br>{q_str} Qty<br>({p_pct:.0f}%)")
             legend_lbls.append(f"<b>{r['CUSTOMERNAMEACTIVE']}</b><br>₹{v_str} | {q_str} Qty | {p_pct:.0f}%")
         return inside_lbls, legend_lbls
@@ -911,9 +901,7 @@ def render_analytics(df_source, tab_key_prefix, is_ytd=False):
             
     c_b1, c_b2 = st.columns(2)
     cust_bot_sort = cust_sum_df.sort_values(by='VALUE', ascending=True).reset_index(drop=True)
-    
-    red_palette_1 = ['#E53935', '#EF5350', '#E57373', '#EF9A9A', '#FFCDD2']
-    red_palette_2 = ['#B71C1C', '#C62828', '#D32F2F', '#E53935', '#EF5350']
+    red_palette_1, red_palette_2 = ['#E53935', '#EF5350', '#E57373', '#EF9A9A', '#FFCDD2'], ['#B71C1C', '#C62828', '#D32F2F', '#E53935', '#EF5350']
 
     with c_b1:
         if not cust_bot_sort.head(5).empty and s_tot > 0:
@@ -984,9 +972,6 @@ def render_analytics(df_source, tab_key_prefix, is_ytd=False):
     render_dimension_twins('EOSS/FRESH', 9)
     render_dimension_twins('FORMAL/CASUAL', 10)
 
-# ==========================================
-# 📅 TABS RENDERING ROUTERS
-# ==========================================
 with tab_current_graph:
     st.markdown(f"#### 📢 **PLEASE NOTE: This data is filtered based on Selected Date Range**")
     if df_ytd_global.empty:
@@ -1063,9 +1048,6 @@ with tab_growth:
                 fig_all_q_neg.update_layout(xaxis=dict(tickmode='linear', dtick=1, tickangle=-45), height=550)
                 st.plotly_chart(make_professional_chart(fig_all_q_neg, "All Degrowing Stores (Qty)"), use_container_width=True, key="growth_qty_4")
 
-# ==========================================
-# TAB 1: DAY-WISE LEDGER
-# ==========================================
 with tab1:
     st.subheader("Time-wise Ledger Comparison" if compare_mode else "Time-wise Ledger Summary")
     view = st.radio("Group By:", ["Day-wise", "Month-wise", "Quarter-wise", "Year-wise"], horizontal=True)
@@ -1172,9 +1154,6 @@ with tab1:
 
     st.dataframe(style_dataframe(final_df), use_container_width=True)
 
-# ==========================================
-# 📅 TAB: WEEK-WISE YoY ANALYSIS 
-# ==========================================
 with tab_week:
     st.subheader("📅 Complete Week Analysis Matrix Layout")
     df_wk = pd.concat([df_comp_kpi, df_base_kpi]).copy()
@@ -1257,9 +1236,6 @@ with tab_week:
     else:
         st.info("Week data sync process active.")
 
-# ==========================================
-# 👕 TAB: ATTRIBUTES DEEP-DIVE
-# ==========================================
 with tab2:
     st.subheader("Attributes Deep-Dive")
     possible_attributes = ['CATEGORY', 'MANAGER', 'CUSTOMERNAMEACTIVE', 'STATE', 'STATUS', 'SIZE', 'SEASON', 'FIT', 'EOSS/FRESH', 'FORMAL/CASUAL']
@@ -1304,9 +1280,6 @@ with tab2:
                 attr_df[col] = attr_df[col].map(lambda x: format_cell(x, col))
         st.dataframe(style_dataframe(attr_df), use_container_width=True)
 
-# ==========================================
-# 👥 TAB: CUSTOMER PERFORMANCE
-# ==========================================
 with tab_cust:
     st.subheader("Customer-wise Performance Metrics")
     df_c = pd.concat([df_comp_kpi, df_base_kpi]).copy()
@@ -1408,9 +1381,6 @@ with tab_cust:
                 
         st.dataframe(style_dataframe(c_df), use_container_width=True, hide_index=True)
 
-# ==========================================
-# 📅 TAB: CUSTOMER MONTH ANALYSIS
-# ==========================================
 with tab_cust_month:
     st.subheader("Customer Month-wise Horizontal Breakdown")
     metric_choice = st.radio("Select Metric:", ["Sale Value (₹)", "Quantity (Qty)"], horizontal=True, key="month_choice_radio")
@@ -1450,14 +1420,11 @@ with tab_cust_month:
                 else: cm_df[col] = cm_df[col].map(lambda x: format_indian_num(x, False))
         st.dataframe(style_dataframe(cm_df), use_container_width=True, hide_index=True)
 
-# ==========================================
-# 🏷️ TAB: DISCOUNT & CONTRIBUTION ANALYSIS
-# ==========================================
 with tab_disc:
     st.subheader("🏷️ Discounting & Contribution Deep-Dive")
 
     if not selected_disc_col:
-        st.warning("⚠️ Kripya global filters se 'Select Discount Column' select karein.")
+        st.warning("⚠️ Kripya global filters se 'Select Discount Column' dropdown mein sahi column select karein.")
     else:
         sel_disc_col = selected_disc_col
 
@@ -1612,7 +1579,7 @@ with tab5:
     st.subheader("📔 Mega Ledger (Restricted by User Rights)")
     st.caption("Aapko sirf wahi headers dikhenge jinki aapko permission di gayi hai.")
     
-    # 🛡️ Applying Column Headers Rights based on logged-in user
+    # 🛡️ Applying Column Headers Rights
     if pd.isna(allowed_columns_str) or allowed_columns_str == "ALL":
         display_df = filtered_df.copy()
     else:
