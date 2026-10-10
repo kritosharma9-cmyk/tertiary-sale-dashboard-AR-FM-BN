@@ -12,6 +12,27 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Tertiary Sale Dashboard", layout="wide", page_icon="📈")
 
 # ==========================================
+# 💾 USER DATABASE & COLUMN RIGHTS LOGIC
+# ==========================================
+def get_users_db():
+    db_file = "users_db.csv"
+    if not os.path.exists(db_file):
+        default_data = {
+            "Username": ["GOD (ADMIN)", "1. BOSS", "2. CHAUHAN SIR", "3. MUNIT", "4. AJAY", "5. ABHISHEK", "6. RAVINDER", "7. BARINDER (ASM)", "8. RAJESH SINGH (ASM)", "9. SULABH (RSM)", "10. ABHISHEK (RSM)"],
+            "Password": ["GOD@123", "BOSS@123", "CHAUHAN@123", "MUNIT@123", "AJAY@123", "ABHI@123", "RAVI@123", "BARINDER@123", "RAJESH@123", "SULABH@123", "ABHI@123"],
+            "Role": ["ADMIN", "ALL", "ALL", "ALL", "ALL", "ALL", "ALL", "AR", "FM", "FM", "AR"],
+            "Allowed_Columns": ["ALL"] * 11
+        }
+        df = pd.DataFrame(default_data)
+        df.to_csv(db_file, index=False)
+        return df
+    else:
+        df = pd.read_csv(db_file)
+        if 'Allowed_Columns' not in df.columns:
+            df['Allowed_Columns'] = "ALL"
+        return df
+
+# ==========================================
 # 🔒 VIP SECURITY ACCESS SYSTEM & ROLE LOGIC
 # ==========================================
 def check_password():
@@ -32,34 +53,23 @@ def check_password():
         with st.container(border=True):
             st.markdown("<h2 style='text-align: center;'>🔐 Secure Dashboard Login</h2>", unsafe_allow_html=True)
             
-            # Users, Unke Password aur Unka Access Role
-            USER_CREDENTIALS = {
-                "1. BOSS": {"password": "BOSS@123", "role": "ALL"},
-                "2. CHAUHAN SIR": {"password": "CHAUHAN@123", "role": "ALL"},
-                "3. MUNIT": {"password": "MUNIT@123", "role": "ALL"},
-                "4. AJAY": {"password": "AJAY@123", "role": "ALL"},
-                "5. ABHISHEK": {"password": "ABHI@123", "role": "ALL"},
-                "6. RAVINDER": {"password": "RAVI@123", "role": "ALL"},
-                "7. BARINDER (ASM)": {"password": "BARINDER@123", "role": "AR"},
-                "8. RAJESH SINGH (ASM)": {"password": "RAJESH@123", "role": "FM"},
-                "9. SULABH (RSM)": {"password": "SULABH@123", "role": "FM"},
-                "10. ABHISHEK (RSM)": {"password": "ABHI@123", "role": "AR"} 
-            }
-            
-            usernames_list = ["-- Apna Naam Select Karein --"] + list(USER_CREDENTIALS.keys())
+            users_df = get_users_db()
+            usernames_list = ["-- Apna Naam Select Karein --"] + users_df['Username'].tolist()
             sel_user = st.selectbox("👤 Username:", usernames_list)
             user_password = st.text_input("🔑 Enter Security Password:", type="password")
             
             if st.button("Login 🚀", use_container_width=True):
                 if sel_user == "-- Apna Naam Select Karein --":
                     st.warning("⚠️ Kripya apna Username select karein.")
-                elif user_password == USER_CREDENTIALS[sel_user]["password"]:
-                    st.session_state.password_correct = True
-                    st.session_state.user_role = USER_CREDENTIALS[sel_user]["role"]
-                    st.session_state.selected_user = sel_user
-                    st.rerun()
                 else:
-                    st.error("❌ Invalid Password")
+                    user_row = users_df[users_df['Username'] == sel_user].iloc[0]
+                    if str(user_password) == str(user_row['Password']):
+                        st.session_state.password_correct = True
+                        st.session_state.user_role = user_row['Role']
+                        st.session_state.selected_user = sel_user
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid Password! Kripya sahi password daalein.")
     return False
 
 if not check_password():
@@ -88,9 +98,15 @@ while len(months_to_show) < 4:
     temp_date = (temp_date.replace(day=1) + timedelta(days=32)).replace(day=1)
     if len(months_to_show) == 4: break
 
-# Custom CSS for Tabs & Print Layout
+# Custom CSS for Tabs, Top Menu Hide & Print Layout
 st.markdown("""
 <style>
+    /* 🚀 TOP MENU, SHARE AUR GITHUB ICON GAYAB */
+    [data-testid="stToolbar"] {visibility: hidden !important;}
+    [data-testid="stHeader"] {visibility: hidden !important;}
+    #MainMenu {visibility: hidden !important;}
+    footer {visibility: hidden !important;}
+
     button[data-baseweb="tab"] {
         border: 2px solid #e0e0e0 !important;
         border-radius: 8px !important;
@@ -157,7 +173,7 @@ def clean_df_for_single_mode(df, b_y):
         cols_to_keep.append(c)
     return df[cols_to_keep]
 
-# 🚀 DATA LOADING & CLEANING LOGIC (ROLE + VIEW BASED + CACHE)
+# 🚀 DATA LOADING & CLEANING LOGIC
 @st.cache_data
 def load_role_based_data(role, view_filter="Default"):
     file_ar = "TERTIARY_SALE AR.xlsx"
@@ -210,7 +226,7 @@ def load_role_based_data(role, view_filter="Default"):
         for dc in disc_like_cols:
             df.loc[mask_anomaly, dc] = 0
             
-    # --- CATEGORY EXCLUDE KARNE KA LOGIC (Nayi aur Purani Dono Shaamil Hain) ---
+    # --- CATEGORY EXCLUDE KARNE KA LOGIC ---
     exclude_items = [
         "ARROW-MENS WESTERN-COMBO SET",
         "DUFFEL TROLLEY BAG",
@@ -276,166 +292,104 @@ def make_fy_html(val_str, gr_val, label, is_disc=False):
 wrapper = "<div style='margin-top: -15px;'>{}</div>"
 
 # ==========================================
-# 🏢 CACHE SYSTEM & SIDEBAR MENU
+# 🎛️ TOP FILTERS SECTION (Moved from Sidebar)
 # ==========================================
-st.sidebar.markdown("### 🏢 Access Level")
-st.sidebar.info(f"👤 **User:** {st.session_state.selected_user}\n\n🔒 **Role:** {st.session_state.user_role} Data")
+users_df = get_users_db()
+current_user_row = users_df[users_df['Username'] == st.session_state.selected_user].iloc[0]
+allowed_columns_str = current_user_row['Allowed_Columns']
 
-# 🔀 BUTTON: Jinke paas 'ALL' access hai, unhe ab file choose karne ka option milega
-if st.session_state.user_role == "ALL":
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🔀 Select Data View")
-    view_filter = st.sidebar.radio("Aap kaunsi file dekhna chahte hain?", ["Combined (AR + FM)", "Only AR Data", "Only FM Data"])
-    display_view = view_filter
-else:
-    view_filter = "Default"
-    display_view = f"{st.session_state.user_role} Data Only"
-
-# 🚀 STRICT RAM MEMORY LOCK 
-if "cached_data" not in st.session_state or st.session_state.get("cached_role") != st.session_state.user_role or st.session_state.get("cached_view") != view_filter:
-    with st.spinner("🚀 Loading Data into Fast Cache..."):
-        st.session_state.cached_data = load_role_based_data(st.session_state.user_role, view_filter)
-        st.session_state.cached_role = st.session_state.user_role
-        st.session_state.cached_view = view_filter
-
-sheet_data = st.session_state.cached_data
-
-# 🔄 MANUAL RELOAD BUTTON
-if st.sidebar.button("🔄 Force Reload / Refresh Data", use_container_width=True):
-    with st.spinner("🔄 Refreshing Data into Fast Cache..."):
-        st.cache_data.clear() # Kachra saaf karne wala naya code
-        st.session_state.cached_data = load_role_based_data(st.session_state.user_role, view_filter)
-    st.rerun()
-st.sidebar.caption("💡 Data naya dekhne ke liye 'Force Reload' dabayein. Excel file GitHub Desktop se Push karein.")
-
-
-# ==========================================
-# 📊 MAIN DASHBOARD (Yahan par selected file ka naam dikhega)
-# ==========================================
 st.title("Tertiary Sale Dashboard 📊")
-st.markdown(f"**Active View:** `{display_view}` | **Logged in as:** `{st.session_state.selected_user}`")
+st.markdown(f"**👤 User:** `{st.session_state.selected_user}` | **Role:** `{st.session_state.user_role}`")
 
-# ==========================================
-# 🔍 SIDEBAR FILTERS FORM
-# ==========================================
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎯 Global Filters")
-
-with st.sidebar.form(key='global_filter_form'):
-    
-    # Checkbox to Toggle Comparison Mode
-    compare_mode = st.checkbox("🔄 Enable Comparison (LY)", value=True)
-    
-    # ⚡ QUICK MONTH SHORTCUT
-    st.markdown("**⚡ Quick Range Shortcut**")
-    shortcut = st.selectbox("Select Preset:", ["None (Use Custom Dates Below)", "This Month", "Last Month", "Year-to-Date (YTD)"])
-
-    st.markdown("**1. Selected Period (Target/TY)**")
-    col_d1, col_d2 = st.columns(2)
-    
-    # Logic to auto-fill dates based on Shortcut
-    if shortcut == "This Month":
-        def_ty_start = today.replace(day=1)
-        def_ty_end = today
-    elif shortcut == "Last Month":
-        first_day_this_month = today.replace(day=1)
-        def_ty_end = first_day_this_month - timedelta(days=1)
-        def_ty_start = def_ty_end.replace(day=1)
-    elif shortcut == "Year-to-Date (YTD)":
-        def_ty_start = datetime(today.year if today.month >= 4 else today.year - 1, 4, 1)
-        def_ty_end = today
-    else:
-        def_ty_start = datetime(today.year, today.month, 1)
-        def_ty_end = today
-
-    ty_start = col_d1.date_input("Start Date (TY)", def_ty_start)
-    ty_end = col_d2.date_input("End Date (TY)", def_ty_end)
-    
-    if compare_mode:
-        st.markdown("**2. Base Period (Last Year/LY)**")
-        col_d3, col_d4 = st.columns(2)
-        try:
-            ly_start_default = ty_start.replace(year=ty_start.year - 1)
-        except ValueError:
-            ly_start_default = ty_start.replace(year=ty_start.year - 1, day=28)
-            
-        try:
-            ly_end_default = ty_end.replace(year=ty_end.year - 1)
-        except ValueError:
-            ly_end_default = ty_end.replace(year=ty_end.year - 1, day=28)
+with st.expander("🛠️ GLOBAL FILTERS & DATA CONTROLS (Click to Expand/Collapse)", expanded=True):
+    with st.form(key='top_filter_form'):
+        f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         
-        ly_start = col_d3.date_input("Start Date (LY)", ly_start_default)
-        ly_end = col_d4.date_input("End Date (LY)", ly_end_default)
-    else:
-        ly_start = ty_start
-        ly_end = ty_end
-    
-    # Convert Streamlit dates to Pandas datetime objects for exact comparison
-    ty_start_dt = pd.to_datetime(ty_start)
-    ty_end_dt = pd.to_datetime(ty_end)
-    ly_start_dt = pd.to_datetime(ly_start)
-    ly_end_dt = pd.to_datetime(ly_end)
-    
-    # Label Names for graphs and tables based on selected years
-    comp_y = str(ty_start.year)
-    base_y = str(ly_start.year) if compare_mode else "N/A_LY"
-    
-    if comp_y == base_y and compare_mode:
-        comp_y = comp_y + " (TY)"
-        base_y = base_y + " (LY)"
-
-    st.markdown("---")
-    
-    all_columns = list(sheet_data.columns)
-    guess_idx = 0
-    for i, c in enumerate(all_columns):
-        if c in ['BILLDATE', 'MONTH_NAME', 'YEAR2']:
-            continue
-        if any(k in c for k in ['BILLNO', 'INVOICENO', 'BILL_NO', 'INVOICE_NO', 'BILL NO', 'INVOICE NO', 'BILL', 'INVOICE', 'NUMBER', 'INV']):
-            guess_idx = i
-            break
-    selected_bill_col = st.selectbox("🧾 Select Bill/Invoice Column:", all_columns, index=guess_idx)
-    
-    # 🔥 GLOBAL DISCOUNT COLUMN SELECTOR
-    st.markdown("---")
-    possible_disc_cols = [c for c in all_columns if any(k in c for k in ['DISC', 'DISCOUNT'])]
-    if possible_disc_cols:
-        guess_disc = 0
-        for i, c in enumerate(possible_disc_cols):
-            if c == 'DISCOUNT' or c == 'DISC' or 'VALUE' in c:
-                guess_disc = i
-                break
-        selected_disc_col = st.selectbox("🏷️ Select Discount Column:", possible_disc_cols, index=guess_disc)
-    else:
-        selected_disc_col = None
-    
-    st.markdown("---")
-    search_cust = st.text_input("🔍 Search Customer Name:").strip().upper()
-    
-    filter_cols = ['MONTH_NAME', 'CUSTOMERNAMEACTIVE', 'MANAGER', 'CATEGORY', 'FIT', 'SEASON', 'STATE', 'STATUS', 'EOSS/FRESH', 'FORMAL/CASUAL']
-    selected_filters = {}
-    
-    for col in filter_cols:
-        if col in sheet_data.columns:
-            unique_vals = sorted([str(x) for x in sheet_data[col].dropna().unique()])
-            selected_filters[col] = st.multiselect(f"Filter by {col.replace('_', ' ').title()}:", unique_vals, default=None)
+        with f_col1:
+            if st.session_state.user_role in ["ALL", "ADMIN"]:
+                view_filter = st.selectbox("🔀 Select Data View:", ["Combined (AR + FM)", "Only AR Data", "Only FM Data"])
+                display_view = view_filter
+            else:
+                view_filter = "Default"
+                display_view = f"{st.session_state.user_role} Data Only"
+                st.info(f"Fixed View: {st.session_state.user_role}")
+                
+        with f_col2:
+            compare_mode = st.checkbox("🔄 Enable Comparison (LY)", value=True)
+            shortcut = st.selectbox("⚡ Quick Range Shortcut:", ["None (Use Custom Dates)", "This Month", "Last Month", "Year-to-Date (YTD)"])
             
-    submit_button = st.form_submit_button(label='Apply Filters 🚀', use_container_width=True)
+        with f_col3:
+            if shortcut == "This Month": def_ty_start, def_ty_end = today.replace(day=1), today
+            elif shortcut == "Last Month": 
+                def_ty_end = today.replace(day=1) - timedelta(days=1)
+                def_ty_start = def_ty_end.replace(day=1)
+            elif shortcut == "Year-to-Date (YTD)": def_ty_start, def_ty_end = datetime(today.year if today.month >= 4 else today.year - 1, 4, 1), today
+            else: def_ty_start, def_ty_end = datetime(today.year, today.month, 1), today
+            
+            ty_start = st.date_input("Start Date (TY)", def_ty_start)
+            ty_end = st.date_input("End Date (TY)", def_ty_end)
+            
+        with f_col4:
+            if compare_mode:
+                try: ly_start_default = ty_start.replace(year=ty_start.year - 1)
+                except ValueError: ly_start_default = ty_start.replace(year=ty_start.year - 1, day=28)
+                try: ly_end_default = ty_end.replace(year=ty_end.year - 1)
+                except ValueError: ly_end_default = ty_end.replace(year=ty_end.year - 1, day=28)
+                ly_start = st.date_input("Start Date (LY)", ly_start_default)
+                ly_end = st.date_input("End Date (LY)", ly_end_default)
+            else:
+                ly_start, ly_end = ty_start, ty_end
 
+        # Load data block inside form
+        if "cached_data" not in st.session_state or st.session_state.get("cached_role") != st.session_state.user_role or st.session_state.get("cached_view") != view_filter:
+            st.session_state.cached_data = load_role_based_data(st.session_state.user_role, view_filter)
+            st.session_state.cached_role = st.session_state.user_role
+            st.session_state.cached_view = view_filter
+        
+        sheet_data = st.session_state.cached_data
+        all_columns = list(sheet_data.columns)
 
-# 📄 PDF DOWNLOADER BUTTON
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 📄 Export to PDF")
-if st.sidebar.button("🖨️ Save Dashboard as PDF", use_container_width=True, type="primary"):
-    st.components.v1.html(
-        """
-        <script>
-            window.parent.print();
-        </script>
-        """,
-        height=0
-    )
-st.sidebar.caption("💡 Tip: Jab Print window aaye, toh Destination ko 'Save as PDF' aur Layout ko 'Landscape' select karein.")
+        st.markdown("---")
+        
+        c_f1, c_f2, c_f3 = st.columns(3)
+        
+        with c_f1:
+            guess_idx = 0
+            for i, c in enumerate(all_columns):
+                if c in ['BILLDATE', 'MONTH_NAME', 'YEAR2']: continue
+                if any(k in c for k in ['BILLNO', 'INVOICENO', 'BILL_NO', 'INVOICE_NO', 'BILL', 'INVOICE', 'NUMBER', 'INV']):
+                    guess_idx = i; break
+            selected_bill_col = st.selectbox("🧾 Select Bill/Invoice Column:", all_columns, index=guess_idx)
+            
+            possible_disc_cols = [c for c in all_columns if any(k in c for k in ['DISC', 'DISCOUNT'])]
+            if possible_disc_cols:
+                guess_disc = 0
+                for i, c in enumerate(possible_disc_cols):
+                    if c in ['DISCOUNT', 'DISC'] or 'VALUE' in c: guess_disc = i; break
+                selected_disc_col = st.selectbox("🏷️ Select Discount Column:", possible_disc_cols, index=guess_disc)
+            else: selected_disc_col = None
+            
+            search_cust = st.text_input("🔍 Search Customer Name:").strip().upper()
+
+        filter_cols = ['MONTH_NAME', 'CUSTOMERNAMEACTIVE', 'MANAGER', 'CATEGORY', 'FIT', 'SEASON', 'STATE', 'STATUS', 'EOSS/FRESH', 'FORMAL/CASUAL']
+        selected_filters = {}
+        
+        for idx, col in enumerate(filter_cols):
+            if col in sheet_data.columns:
+                unique_vals = sorted([str(x) for x in sheet_data[col].dropna().unique()])
+                if idx % 2 == 0: selected_filters[col] = c_f2.multiselect(f"Filter by {col.replace('_', ' ').title()}:", unique_vals, default=None)
+                else: selected_filters[col] = c_f3.multiselect(f"Filter by {col.replace('_', ' ').title()}:", unique_vals, default=None)
+
+        submit_button = st.form_submit_button(label='🚀 Apply All Filters & Render', use_container_width=True)
+
+# Quick Action Buttons
+btn1, btn2, btn3 = st.columns([1,1,4])
+if btn1.button("🔄 Force Refresh Cache", use_container_width=True):
+    st.cache_data.clear()
+    st.session_state.cached_data = load_role_based_data(st.session_state.user_role, view_filter)
+    st.rerun()
+if btn2.button("🖨️ Save Dashboard as PDF", use_container_width=True):
+    st.components.v1.html("<script>window.parent.print();</script>", height=0)
 
 
 # Application of Filters
@@ -448,17 +402,12 @@ for col, selected_vals in selected_filters.items():
     if len(selected_vals) > 0:
         filtered_df = filtered_df[filtered_df[col].astype(str).isin(selected_vals)]
 
-# 🆕 EXCEL-STYLE SLICER & PREMIUM BLUE TAGS DISPLAY
+# EXCEL-STYLE SLICER
 if search_cust:
     matched_parties = sorted(filtered_df['CUSTOMERNAMEACTIVE'].dropna().unique().tolist())
-    
     if matched_parties:
         with st.expander("🎛️ Click Here to Filter Specific Stores (Excel-Style Slicer)", expanded=False):
-            selected_parties = st.multiselect(
-                "Remove stores by clicking 'x' or select specific ones:",
-                options=matched_parties,
-                default=matched_parties
-            )
+            selected_parties = st.multiselect("Remove stores by clicking 'x' or select specific ones:", options=matched_parties, default=matched_parties)
         if selected_parties:
             filtered_df = filtered_df[filtered_df['CUSTOMERNAMEACTIVE'].isin(selected_parties)]
         else:
@@ -467,22 +416,19 @@ if search_cust:
         if selected_parties:
             num_stores = len(selected_parties)
             tags_html = "".join([f"<span style='background-color: #e3f2fd; color: #1565c0; padding: 5px 12px; border-radius: 15px; font-size: 13px; font-weight: 500; border: 1px solid #90caf9; display: inline-block; margin: 3px;'>{party}</span>" for party in selected_parties])
-            
             st.markdown(f"""
             <div style='background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
                 <div style='font-size: 16px; font-weight: bold; color: #1F4E79; margin-bottom: 12px; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px;'>
                     🏬 Viewing Data For: "{search_cust}" 
                     <span style='background-color: #ffebee; color: #c62828; padding: 3px 8px; border-radius: 10px; font-size: 12px; margin-left: 8px;'>{num_stores} Stores Selected</span>
                 </div>
-                <div style='display: flex; flex-wrap: wrap; gap: 4px;'>
-                    {tags_html}
-                </div>
+                <div style='display: flex; flex-wrap: wrap; gap: 4px;'>{tags_html}</div>
             </div>
             """, unsafe_allow_html=True)
     else:
         st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #c62828; background-color: #ffebee; padding: 12px; border-radius: 8px; border: 1px solid #ef9a9a; margin-bottom: 20px;'>🏬 No Party Found Matching: \"{search_cust}\"</div>", unsafe_allow_html=True)
 
-# Generate Unique Bill IDs (Smart Logic: Customer + Bill Date + Bill No)
+# Generate Unique Bill IDs
 if selected_bill_col in filtered_df.columns and 'CUSTOMERNAMEACTIVE' in filtered_df.columns:
     filtered_df['UNIQUE_BILL_ID'] = (
         filtered_df['CUSTOMERNAMEACTIVE'].astype(str).str.strip() + "_" + 
@@ -492,21 +438,22 @@ if selected_bill_col in filtered_df.columns and 'CUSTOMERNAMEACTIVE' in filtered
 else:
     filtered_df['UNIQUE_BILL_ID'] = filtered_df['BILLDATE'].astype(str)
 
-# Global FY Year Definition
 filtered_df['FY_YEAR'] = np.where(filtered_df['BILLDATE'].dt.month < 4, filtered_df['BILLDATE'].dt.year - 1, filtered_df['BILLDATE'].dt.year)
 
-# 🔄 DYNAMIC DATE FILTERING LOGIC
-df_comp_kpi = filtered_df[(filtered_df['BILLDATE'] >= ty_start_dt) & (filtered_df['BILLDATE'] <= ty_end_dt)].copy()
+ty_start_dt, ty_end_dt = pd.to_datetime(ty_start), pd.to_datetime(ty_end)
+ly_start_dt, ly_end_dt = pd.to_datetime(ly_start), pd.to_datetime(ly_end)
 
-if compare_mode:
-    df_base_kpi = filtered_df[(filtered_df['BILLDATE'] >= ly_start_dt) & (filtered_df['BILLDATE'] <= ly_end_dt)].copy()
-else:
-    df_base_kpi = pd.DataFrame(columns=filtered_df.columns)
+comp_y = str(ty_start.year)
+base_y = str(ly_start.year) if compare_mode else "N/A_LY"
+if comp_y == base_y and compare_mode:
+    comp_y, base_y = comp_y + " (TY)", base_y + " (LY)"
+
+df_comp_kpi = filtered_df[(filtered_df['BILLDATE'] >= ty_start_dt) & (filtered_df['BILLDATE'] <= ty_end_dt)].copy()
+df_base_kpi = filtered_df[(filtered_df['BILLDATE'] >= ly_start_dt) & (filtered_df['BILLDATE'] <= ly_end_dt)].copy() if compare_mode else pd.DataFrame(columns=filtered_df.columns)
 
 df_comp_kpi['YEAR2'] = comp_y
 df_base_kpi['YEAR2'] = base_y
 
-# Dynamic Year-to-Date isolation ranges
 df_ytd_comp = df_comp_kpi.copy()
 df_ytd_base = df_base_kpi.copy()
 df_ytd_global = pd.concat([df_ytd_comp, df_ytd_base])
@@ -523,11 +470,9 @@ d_comp_ytd_g, d_base_ytd_g = df_ytd_comp['CUSTOMERNAMEACTIVE'].nunique() if 'CUS
 hdr_title = f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')} vs LY)" if compare_mode else f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')})"
 st.markdown(hdr_title)
 
-# Base Data for KPIs
 df_comp_perf = df_comp_kpi.copy()
 df_base_perf = df_base_kpi.copy()
 
-# Global KPI aggregates
 s_comp = df_comp_perf['SALEVAL'].sum()
 s_base = df_base_perf['SALEVAL'].sum()
 q_comp = df_comp_perf['QTY'].sum()
@@ -544,7 +489,6 @@ aqv_base = s_base / q_base if q_base > 0 else 0
 upt_comp = q_comp / b_comp if b_comp > 0 else 0
 upt_base = q_base / b_base if b_base > 0 else 0
 
-# GLOBAL DISCOUNT PERCENTAGE (GROSS SALE METHOD)
 if selected_disc_col:
     disc_g_c = abs(df_comp_perf[selected_disc_col].sum())
     disc_g_b = abs(df_base_perf[selected_disc_col].sum()) if compare_mode else 0
@@ -564,10 +508,8 @@ disc_pct_g_b = (disc_g_b / gross_g_b * 100) if gross_g_b > 0 else 0
 temp_fy_all = filtered_df.copy()
 
 agg_funcs = {'SALEVAL': 'sum', 'QTY': 'sum'}
-if 'UNIQUE_BILL_ID' in temp_fy_all.columns:
-    agg_funcs['UNIQUE_BILL_ID'] = 'nunique'
-if 'CUSTOMERNAMEACTIVE' in temp_fy_all.columns:
-    agg_funcs['CUSTOMERNAMEACTIVE'] = 'nunique'
+if 'UNIQUE_BILL_ID' in temp_fy_all.columns: agg_funcs['UNIQUE_BILL_ID'] = 'nunique'
+if 'CUSTOMERNAMEACTIVE' in temp_fy_all.columns: agg_funcs['CUSTOMERNAMEACTIVE'] = 'nunique'
     
 fy_hist = temp_fy_all.groupby('FY_YEAR').agg(agg_funcs).sort_index(ascending=False)
 fy_hist.rename(columns={'UNIQUE_BILL_ID': 'BILLS', 'CUSTOMERNAMEACTIVE': 'DOORS'}, inplace=True)
@@ -575,10 +517,8 @@ fy_hist.rename(columns={'UNIQUE_BILL_ID': 'BILLS', 'CUSTOMERNAMEACTIVE': 'DOORS'
 if 'BILLS' not in fy_hist.columns: fy_hist['BILLS'] = 0
 if 'DOORS' not in fy_hist.columns: fy_hist['DOORS'] = 0
 
-if selected_disc_col:
-    fy_hist['DISC'] = temp_fy_all.groupby('FY_YEAR')[selected_disc_col].apply(lambda x: abs(x.sum()))
-else:
-    fy_hist['DISC'] = 0
+if selected_disc_col: fy_hist['DISC'] = temp_fy_all.groupby('FY_YEAR')[selected_disc_col].apply(lambda x: abs(x.sum()))
+else: fy_hist['DISC'] = 0
 
 fy_hist['SALE_LY'] = fy_hist['SALEVAL'].shift(-1)
 fy_hist['QTY_LY'] = fy_hist['QTY'].shift(-1)
@@ -878,12 +818,23 @@ else:
             
 st.markdown("---")
 
-# Navigation setup
-tab_current_graph, tab_graph, tab_growth, tab1, tab_week, tab2, tab_cust, tab_cust_month, tab_disc, tab3, tab4, tab5, tab_advanced = st.tabs([
+# Navigation setup - Dynamic Based on User Role
+tabs_list = [
     "📅 Selected Range Analytics Summary", "📊 Analytics Summary", "🚀 Store Growth Deep-Dive", "📈 YoY Growth", "📅 Week-wise Analysis",
     "👕 Attributes", "👥 Customer Performance", "📅 Customer Month Analysis", 
     "🏷️ Discount & Contribution", "📊 Category vs Time", "🏆 Top Performers", "📔 Mega Ledger", "🚀 Advanced Analytics"
-])
+]
+
+if st.session_state.selected_user == "GOD (ADMIN)":
+    tabs_list.append("⚙️ Admin Control")
+
+tabs = st.tabs(tabs_list)
+
+if st.session_state.selected_user == "GOD (ADMIN)":
+    tab_current_graph, tab_graph, tab_growth, tab1, tab_week, tab2, tab_cust, tab_cust_month, tab_disc, tab3, tab4, tab5, tab_advanced, tab_admin = tabs
+else:
+    tab_current_graph, tab_graph, tab_growth, tab1, tab_week, tab2, tab_cust, tab_cust_month, tab_disc, tab3, tab4, tab5, tab_advanced = tabs
+
 
 def make_professional_chart(fig, title_text, is_pie=False):
     fig.update_layout(
@@ -1049,7 +1000,7 @@ with tab_graph:
 
 with tab_growth:
     if not compare_mode:
-        st.info("⚠️ YoY Growth Analytics tab is disabled because **Comparison Mode** is OFF. Please enable it from the sidebar to view these insights.")
+        st.info("⚠️ YoY Growth Analytics tab is disabled because **Comparison Mode** is OFF.")
     else:
         st.markdown("### 💰 1. Value Wise Growth Performance Summary")
         df_sg_val = pd.concat([df_comp_kpi, df_base_kpi]).pivot_table(index='CUSTOMERNAMEACTIVE', columns='YEAR2', values='SALEVAL', aggfunc='sum', fill_value=0).reset_index()
@@ -1506,7 +1457,7 @@ with tab_disc:
     st.subheader("🏷️ Discounting & Contribution Deep-Dive")
 
     if not selected_disc_col:
-        st.warning("⚠️ Kripya sidebar se 'Select Discount Column' dropdown mein sahi column select karein.")
+        st.warning("⚠️ Kripya global filters se 'Select Discount Column' select karein.")
     else:
         sel_disc_col = selected_disc_col
 
@@ -1656,13 +1607,26 @@ with tab_disc:
 
 with tab3: st.write("Category trends...")
 with tab4: st.write("Performers...")
-with tab5: st.write("Full Data Dataframe records clear hain...")
+
+with tab5:
+    st.subheader("📔 Mega Ledger (Restricted by User Rights)")
+    st.caption("Aapko sirf wahi headers dikhenge jinki aapko permission di gayi hai.")
+    
+    # 🛡️ Applying Column Headers Rights based on logged-in user
+    if pd.isna(allowed_columns_str) or allowed_columns_str == "ALL":
+        display_df = filtered_df.copy()
+    else:
+        allowed_list = [c.strip() for c in allowed_columns_str.split(",")]
+        valid_cols = [c for c in allowed_list if c in filtered_df.columns]
+        display_df = filtered_df[valid_cols].copy()
+        
+    st.dataframe(display_df, use_container_width=True)
 
 # ==========================================
 # 🚀 PRO-MAX ADVANCED ANALYTICS SUITE
 # ==========================================
 with tab_advanced:
-    st.subheader("🚀 Advanced Analytics & Smart Business Filters")
+    st.markdown("<h2 style='text-align: center; color: #1F4E79;'>🌟 PRO-MAX ADVANCED ANALYTICS SUITE 🌟</h2>", unsafe_allow_html=True)
     st.markdown("Yeh section completely isolated hai. Yahan lagaye gaye filters purane tabs ke data ko affect nahi karenge.")
     
     adv_col1, adv_col2, adv_col3 = st.columns(3)
@@ -1730,7 +1694,7 @@ with tab_advanced:
         else:
             st.warning("Waterfall chart ke liye 'CUSTOMERNAMEACTIVE' column ki zarurat hai.")
     else:
-        st.info("⚠️ Waterfall Chart dekhne ke liye sidebar se 'Enable Comparison (LY)' ON karein.")
+        st.info("⚠️ Waterfall Chart dekhne ke liye global filters se 'Enable Comparison (LY)' ON karein.")
         
     st.markdown("---")
     
@@ -1744,224 +1708,269 @@ with tab_advanced:
             fig_funnel.update_layout(title={'text': f"Top {top_n} Categories Flow", 'font': {'size': 20, 'weight': 'bold'}, 'x': 0.02}, template='plotly_white')
             st.plotly_chart(fig_funnel, use_container_width=True)
 
-
-# =====================================================================
-# 🚀 🚀 PRO-MAX ADVANCED ANALYTICS SUITE (NEW STANDALONE MODULE) 🚀 🚀
-# =====================================================================
-st.markdown("<br><br><hr style='border: 2px dashed #1F4E79;'>", unsafe_allow_html=True)
-st.markdown("<h2 style='text-align: center; color: #1F4E79;'>🌟 PRO-MAX ADVANCED ANALYTICS SUITE 🌟</h2>", unsafe_allow_html=True)
-
-tab_map, tab_rfm, tab_gauge, tab_basket, tab_price, tab_ai, tab_report = st.tabs([
-    "🗺️ Geo Map", "🎯 RFM Segmentation", "⏱️ Speedometer", 
-    "🛒 Basket Analysis", "📉 Price Sensitivity", "🔮 AI Forecast", "📩 Auto Report"
-])
-
-with tab_map:
-    st.subheader("🗺️ Geographical Sales Heatmap")
-    if 'STATE' in df_comp_kpi.columns:
-        state_coords = {
-            'MAHARASHTRA': (19.7515, 75.7139), 'DELHI': (28.7041, 77.1025), 'KARNATAKA': (15.3173, 75.7139),
-            'GUJARAT': (22.2587, 71.1924), 'TELANGANA': (18.1124, 79.0193), 'TAMIL NADU': (11.1271, 78.6569),
-            'WEST BENGAL': (22.9868, 87.8550), 'RAJASTHAN': (27.0238, 74.2179), 'UTTAR PRADESH': (26.8467, 80.9462),
-            'MADHYA PRADESH': (22.9734, 78.6569), 'PUNJAB': (31.1471, 75.3412), 'HARYANA': (29.0588, 76.0856),
-            'KERALA': (10.8505, 76.2711), 'BIHAR': (25.0961, 85.3131), 'ODISHA': (20.9517, 85.0985),
-            'ASSAM': (26.2006, 92.9376), 'JHARKHAND': (23.6102, 85.2799), 'CHHATTISGARH': (21.2787, 81.8661),
-            'UTTARAKHAND': (30.0668, 79.0193), 'HIMACHAL PRADESH': (31.1048, 77.1734), 'JAMMU AND KASHMIR': (33.7782, 76.5762),
-            'GOA': (15.2993, 74.1240), 'CHANDIGARH': (30.7333, 76.7794), 'ANDHRA PRADESH': (15.9129, 79.7400)
-        }
-        
-        map_df = df_comp_kpi.groupby('STATE').agg({'SALEVAL': 'sum', 'QTY': 'sum'}).reset_index()
-        
-        map_df['LAT'] = map_df['STATE'].apply(lambda x: state_coords.get(str(x).upper().strip(), (None, None))[0])
-        map_df['LON'] = map_df['STATE'].apply(lambda x: state_coords.get(str(x).upper().strip(), (None, None))[1])
-        map_df = map_df.dropna(subset=['LAT', 'LON'])
-        
-        if not map_df.empty:
-            map_df['Hover Text'] = map_df.apply(lambda row: f"State: {row['STATE']}<br>Sale: {format_indian_num(row['SALEVAL'], True)}<br>Qty: {format_indian_num(row['QTY'], False)}", axis=1)
-            
-            fig_map = px.scatter_mapbox(
-                map_df, lat="LAT", lon="LON", size="SALEVAL", color="SALEVAL", 
-                hover_name="STATE", hover_data={"LAT": False, "LON": False, "SALEVAL": False}, 
-                text="Hover Text", color_continuous_scale=px.colors.sequential.Teal, 
-                size_max=40, zoom=3.5, center={"lat": 22.0, "lon": 79.0},
-                mapbox_style="open-street-map"
-            )
-            fig_map.update_traces(hovertemplate="%{text}")
-            
-            min_sale_val, max_sale_val = map_df['SALEVAL'].min(), map_df['SALEVAL'].max()
-            tick_v = np.linspace(min_sale_val, max_sale_val, num=5)
-            tick_t = [format_indian_num(v, is_currency=True) for v in tick_v]
-
-            fig_map.update_layout(
-                margin={"r":0,"t":40,"l":0,"b":0}, 
-                title={'text': 'Sales Distribution Across India', 'font': {'size': 20, 'weight': 'bold'}},
-                coloraxis_colorbar=dict(
-                    title="Total Sales",
-                    tickmode="array",
-                    tickvals=tick_v,
-                    ticktext=tick_t
-                )
-            )
-            st.plotly_chart(fig_map, use_container_width=True)
-        else:
-            st.info("Map render karne ke liye 'STATE' column ka valid Indian states ke naam hona zaruri hai.")
-    else:
-        st.warning("Map ke liye 'STATE' column data mein missing hai.")
-
-with tab_rfm:
-    st.subheader("🎯 RFM (Recency, Frequency, Monetary) Segmentation")
-    st.caption("AI-Driven categorisation of stores based on their buying behaviour.")
-    if 'CUSTOMERNAMEACTIVE' in df_comp_kpi.columns and 'UNIQUE_BILL_ID' in df_comp_kpi.columns:
-        last_date = df_comp_kpi['BILLDATE'].max()
-        rfm = df_comp_kpi.groupby('CUSTOMERNAMEACTIVE').agg(
-            Recency=('BILLDATE', lambda x: (last_date - x.max()).days),
-            Frequency=('UNIQUE_BILL_ID', 'nunique'),
-            Monetary=('SALEVAL', 'sum')
-        ).reset_index()
-        
-        r_labels, f_labels, m_labels = range(4, 0, -1), range(1, 5), range(1, 5)
-        try:
-            rfm['R'] = pd.qcut(rfm['Recency'].rank(method='first'), q=4, labels=r_labels)
-            rfm['F'] = pd.qcut(rfm['Frequency'].rank(method='first'), q=4, labels=f_labels)
-            rfm['M'] = pd.qcut(rfm['Monetary'].rank(method='first'), q=4, labels=m_labels)
-            
-            def join_rfm(x): return str(x['R']) + str(x['F']) + str(x['M'])
-            rfm['RFM_Segment'] = rfm.apply(join_rfm, axis=1)
-            
-            def rfm_level(df):
-                score = int(df['RFM_Segment'])
-                if score >= 444: return '🌟 Champions'
-                elif score >= 333: return '🤝 Loyal Customers'
-                elif score >= 222: return '⚠️ Needs Attention'
-                else: return '🚨 At Risk'
-            
-            rfm['Customer Grade'] = rfm.apply(rfm_level, axis=1)
-            
-            fig_rfm = px.treemap(rfm, path=['Customer Grade', 'CUSTOMERNAMEACTIVE'], values='Monetary', 
-                                 color='Monetary', color_continuous_scale='Blues')
-            st.plotly_chart(make_professional_chart(fig_rfm, "RFM Customer Portfolio Heatmap"), use_container_width=True)
-        except ValueError:
-            st.info("RFM model chalane ke liye aur data points (customers) ki zarurat hai.")
-    else:
-        st.warning("Customer Name ya Unique Bill ID missing hai.")
-
-with tab_gauge:
-    st.subheader("⏱️ Speedometer: Target vs Achievement")
-    st.caption("Adjust target below to see dynamic achievement gauge.")
+    st.markdown("<br><br><hr style='border: 2px dashed #1F4E79;'>", unsafe_allow_html=True)
     
-    col_t1, col_t2 = st.columns([1, 2])
-    current_sale = float(df_comp_kpi['SALEVAL'].sum())
-    
-    with col_t1:
-        st.markdown("<br>", unsafe_allow_html=True)
-        default_target = current_sale * 1.2 if current_sale > 0 else 1000000
-        target_val = st.number_input("Set Your Sales Target (₹)", min_value=1, value=int(default_target), step=10000)
-    
-    with col_t2:
-        fig_gauge = go.Figure(go.Indicator(
-            mode = "gauge+number+delta",
-            value = current_sale,
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Sales Target Achievement", 'font': {'size': 20}},
-            delta = {'reference': target_val, 'increasing': {'color': "green"}, 'decreasing': {'color': "red"}},
-            gauge = {
-                'axis': {'range': [None, target_val * 1.5], 'tickwidth': 1, 'tickcolor': "darkblue"},
-                'bar': {'color': "#1F4E79"},
-                'bgcolor': "white",
-                'borderwidth': 2,
-                'bordercolor': "gray",
-                'steps': [
-                    {'range': [0, target_val * 0.5], 'color': '#ffcdd2'},
-                    {'range': [target_val * 0.5, target_val * 0.9], 'color': '#fff9c4'},
-                    {'range': [target_val * 0.9, target_val * 1.5], 'color': '#c8e6c9'}],
-                'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': target_val}
+    tab_map, tab_rfm, tab_gauge, tab_basket, tab_price, tab_ai, tab_report = st.tabs([
+        "🗺️ Geo Map", "🎯 RFM Segmentation", "⏱️ Speedometer", 
+        "🛒 Basket Analysis", "📉 Price Sensitivity", "🔮 AI Forecast", "📩 Auto Report"
+    ])
+
+    with tab_map:
+        st.subheader("🗺️ Geographical Sales Heatmap")
+        if 'STATE' in df_comp_kpi.columns:
+            state_coords = {
+                'MAHARASHTRA': (19.7515, 75.7139), 'DELHI': (28.7041, 77.1025), 'KARNATAKA': (15.3173, 75.7139),
+                'GUJARAT': (22.2587, 71.1924), 'TELANGANA': (18.1124, 79.0193), 'TAMIL NADU': (11.1271, 78.6569),
+                'WEST BENGAL': (22.9868, 87.8550), 'RAJASTHAN': (27.0238, 74.2179), 'UTTAR PRADESH': (26.8467, 80.9462),
+                'MADHYA PRADESH': (22.9734, 78.6569), 'PUNJAB': (31.1471, 75.3412), 'HARYANA': (29.0588, 76.0856),
+                'KERALA': (10.8505, 76.2711), 'BIHAR': (25.0961, 85.3131), 'ODISHA': (20.9517, 85.0985),
+                'ASSAM': (26.2006, 92.9376), 'JHARKHAND': (23.6102, 85.2799), 'CHHATTISGARH': (21.2787, 81.8661),
+                'UTTARAKHAND': (30.0668, 79.0193), 'HIMACHAL PRADESH': (31.1048, 77.1734), 'JAMMU AND KASHMIR': (33.7782, 76.5762),
+                'GOA': (15.2993, 74.1240), 'CHANDIGARH': (30.7333, 76.7794), 'ANDHRA PRADESH': (15.9129, 79.7400)
             }
-        ))
-        st.plotly_chart(fig_gauge, use_container_width=True)
-
-with tab_basket:
-    st.subheader("🛒 Market Basket (Categories bought together)")
-    if 'CATEGORY' in df_comp_kpi.columns and 'UNIQUE_BILL_ID' in df_comp_kpi.columns:
-        basket = df_comp_kpi.groupby(['UNIQUE_BILL_ID', 'CATEGORY'])['QTY'].sum().unstack().reset_index().fillna(0)
-        basket = basket.set_index('UNIQUE_BILL_ID')
-        basket_sets = (basket > 0).astype(int)
-        
-        if len(basket_sets.columns) > 1:
-            co_matrix = basket_sets.T.dot(basket_sets)
-            for i in range(len(co_matrix.columns)):
-                co_matrix.iloc[i, i] = 0
             
-            fig_matrix = px.imshow(co_matrix, text_auto=True, color_continuous_scale='Purples', 
-                                   aspect="auto", labels=dict(x="Category 1", y="Category 2", color="Co-occurrences"))
-            fig_matrix.update_layout(title="Cross-Selling Heatmap (Count of shared bills)")
-            st.plotly_chart(fig_matrix, use_container_width=True)
-        else:
-            st.info("Basket analysis ke liye ek se zyada category ka data hona zaruri hai.")
-    else:
-        st.warning("UNIQUE_BILL_ID ya CATEGORY column nahi mila.")
-
-with tab_price:
-    st.subheader("📉 Price Sensitivity (Impact of Discount on Volume)")
-    if selected_disc_col and 'CATEGORY' in df_comp_kpi.columns:
-        sens_df = df_comp_kpi.groupby('CATEGORY').agg(SALE=('SALEVAL', 'sum'), QTY=('QTY', 'sum'), DISC=(selected_disc_col, 'sum')).reset_index()
-        sens_df['DISC'] = sens_df['DISC'].abs()
-        sens_df['Gross'] = sens_df['SALE'].abs() + sens_df['DISC']
-        sens_df['Disc %'] = (sens_df['DISC'] / sens_df['Gross'] * 100).fillna(0)
-        sens_df = sens_df[sens_df['QTY'] > 0]
-        
-        fig_scatter = px.scatter(sens_df, x='Disc %', y='QTY', size='SALE', color='CATEGORY', 
-                                 hover_name='CATEGORY', size_max=40, template='plotly_white')
-        fig_scatter.update_layout(title="Category-wise Volume elasticity against Discounts", 
-                                  xaxis_title="Average Discount %", yaxis_title="Total Qty Sold")
-        st.plotly_chart(fig_scatter, use_container_width=True)
-    else:
-        st.info("Global filters mein Discount column select karein.")
-
-with tab_ai:
-    st.subheader("🔮 Predictive Sales Forecast (Next 15 Days)")
-    st.caption("Historical daily data ke base par AI-driven trend line.")
-    
-    daily_sales = df_comp_kpi.groupby(df_comp_kpi['BILLDATE'].dt.date)['SALEVAL'].sum().reset_index()
-    daily_sales.columns = ['Date', 'Actual_Sales']
-    
-    if len(daily_sales) > 5:
-        daily_sales['Date'] = pd.to_datetime(daily_sales['Date'])
-        last_date_ai = daily_sales['Date'].max()
-        future_dates = [last_date_ai + timedelta(days=i) for i in range(1, 16)]
-        
-        ewma_trend = daily_sales['Actual_Sales'].ewm(span=7, adjust=False).mean().iloc[-1]
-        
-        future_df = pd.DataFrame({'Date': future_dates, 'Forecast_Sales': [ewma_trend] * 15})
-        
-        fig_ai = go.Figure()
-        fig_ai.add_trace(go.Scatter(x=daily_sales['Date'], y=daily_sales['Actual_Sales'], mode='lines+markers', name='Actual Sales', line=dict(color='#1F4E79', width=2)))
-        fig_ai.add_trace(go.Scatter(x=future_df['Date'], y=future_df['Forecast_Sales'], mode='lines', name='AI Predicted Trend', line=dict(color='#E53935', width=2, dash='dash')))
-        
-        fig_ai.update_layout(title="Sales Trend & Near-Future Projection", xaxis_title="Date", yaxis_title="Sale Value", template='plotly_white')
-        st.plotly_chart(fig_ai, use_container_width=True)
-    else:
-        st.info("Forecasting algorithm ke liye kam se kam 5 din ka continuous data chahiye.")
-
-with tab_report:
-    st.subheader("📩 Management Auto-Report System")
-    st.markdown("Is button par click karke aap direct Management ko dashboard ka summarized snap (Total Sale, Qty, Top Store) bhej sakte hain (Simulated).")
-    
-    report_email = st.text_input("Enter Boss/Manager Email ID:", "manager@company.com")
-    
-    if st.button("🚀 Trigger Management Email Report", type="primary"):
-        with st.spinner("Compiling insights and generating report..."):
-            import time
-            time.sleep(1.5)
+            map_df = df_comp_kpi.groupby('STATE').agg({'SALEVAL': 'sum', 'QTY': 'sum'}).reset_index()
             
-            top_store_name = "N/A"
-            if 'CUSTOMERNAMEACTIVE' in df_comp_kpi.columns and not df_comp_kpi.empty:
-                top_store_name = df_comp_kpi.groupby('CUSTOMERNAMEACTIVE')['SALEVAL'].sum().idxmax()
+            map_df['LAT'] = map_df['STATE'].apply(lambda x: state_coords.get(str(x).upper().strip(), (None, None))[0])
+            map_df['LON'] = map_df['STATE'].apply(lambda x: state_coords.get(str(x).upper().strip(), (None, None))[1])
+            map_df = map_df.dropna(subset=['LAT', 'LON'])
+            
+            if not map_df.empty:
+                map_df['Hover Text'] = map_df.apply(lambda row: f"State: {row['STATE']}<br>Sale: {format_indian_num(row['SALEVAL'], True)}<br>Qty: {format_indian_num(row['QTY'], False)}", axis=1)
                 
-            st.success(f"✅ Successfully sent to **{report_email}**!")
-            st.info(f"""
-            **Preview of Sent Email:**
-            - 📈 **Total TY Sale:** {format_indian_num(df_comp_kpi['SALEVAL'].sum(), True)}
-            - 📦 **Total TY Qty:** {format_indian_num(df_comp_kpi['QTY'].sum(), False)}
-            - 🏆 **Top Store:** {top_store_name}
-            - 📅 **Period:** {ty_start.strftime('%d %b %Y')} to {ty_end.strftime('%d %b %Y')}
-            """)
+                fig_map = px.scatter_mapbox(
+                    map_df, lat="LAT", lon="LON", size="SALEVAL", color="SALEVAL", 
+                    hover_name="STATE", hover_data={"LAT": False, "LON": False, "SALEVAL": False}, 
+                    text="Hover Text", color_continuous_scale=px.colors.sequential.Teal, 
+                    size_max=40, zoom=3.5, center={"lat": 22.0, "lon": 79.0},
+                    mapbox_style="open-street-map"
+                )
+                fig_map.update_traces(hovertemplate="%{text}")
+                
+                min_sale_val_m, max_sale_val_m = map_df['SALEVAL'].min(), map_df['SALEVAL'].max()
+                tick_v = np.linspace(min_sale_val_m, max_sale_val_m, num=5)
+                tick_t = [format_indian_num(v, is_currency=True) for v in tick_v]
+
+                fig_map.update_layout(
+                    margin={"r":0,"t":40,"l":0,"b":0}, 
+                    title={'text': 'Sales Distribution Across India', 'font': {'size': 20, 'weight': 'bold'}},
+                    coloraxis_colorbar=dict(title="Total Sales", tickmode="array", tickvals=tick_v, ticktext=tick_t)
+                )
+                st.plotly_chart(fig_map, use_container_width=True)
+            else:
+                st.info("Map render karne ke liye 'STATE' column ka valid Indian states ke naam hona zaruri hai.")
+        else:
+            st.warning("Map ke liye 'STATE' column data mein missing hai.")
+
+    with tab_rfm:
+        st.subheader("🎯 RFM (Recency, Frequency, Monetary) Segmentation")
+        st.caption("AI-Driven categorisation of stores based on their buying behaviour.")
+        if 'CUSTOMERNAMEACTIVE' in df_comp_kpi.columns and 'UNIQUE_BILL_ID' in df_comp_kpi.columns:
+            last_date = df_comp_kpi['BILLDATE'].max()
+            rfm = df_comp_kpi.groupby('CUSTOMERNAMEACTIVE').agg(
+                Recency=('BILLDATE', lambda x: (last_date - x.max()).days),
+                Frequency=('UNIQUE_BILL_ID', 'nunique'),
+                Monetary=('SALEVAL', 'sum')
+            ).reset_index()
+            
+            r_labels, f_labels, m_labels = range(4, 0, -1), range(1, 5), range(1, 5)
+            try:
+                rfm['R'] = pd.qcut(rfm['Recency'].rank(method='first'), q=4, labels=r_labels)
+                rfm['F'] = pd.qcut(rfm['Frequency'].rank(method='first'), q=4, labels=f_labels)
+                rfm['M'] = pd.qcut(rfm['Monetary'].rank(method='first'), q=4, labels=m_labels)
+                
+                def join_rfm(x): return str(x['R']) + str(x['F']) + str(x['M'])
+                rfm['RFM_Segment'] = rfm.apply(join_rfm, axis=1)
+                
+                def rfm_level(df):
+                    score = int(df['RFM_Segment'])
+                    if score >= 444: return '🌟 Champions'
+                    elif score >= 333: return '🤝 Loyal Customers'
+                    elif score >= 222: return '⚠️ Needs Attention'
+                    else: return '🚨 At Risk'
+                
+                rfm['Customer Grade'] = rfm.apply(rfm_level, axis=1)
+                
+                fig_rfm = px.treemap(rfm, path=['Customer Grade', 'CUSTOMERNAMEACTIVE'], values='Monetary', 
+                                     color='Monetary', color_continuous_scale='Blues')
+                st.plotly_chart(make_professional_chart(fig_rfm, "RFM Customer Portfolio Heatmap"), use_container_width=True)
+            except ValueError:
+                st.info("RFM model chalane ke liye aur data points (customers) ki zarurat hai.")
+        else:
+            st.warning("Customer Name ya Unique Bill ID missing hai.")
+
+    with tab_gauge:
+        st.subheader("⏱️ Speedometer: Target vs Achievement")
+        st.caption("Adjust target below to see dynamic achievement gauge.")
+        
+        col_t1, col_t2 = st.columns([1, 2])
+        current_sale = float(df_comp_kpi['SALEVAL'].sum())
+        
+        with col_t1:
+            st.markdown("<br>", unsafe_allow_html=True)
+            default_target = current_sale * 1.2 if current_sale > 0 else 1000000
+            target_val = st.number_input("Set Your Sales Target (₹)", min_value=1, value=int(default_target), step=10000)
+        
+        with col_t2:
+            fig_gauge = go.Figure(go.Indicator(
+                mode = "gauge+number+delta",
+                value = current_sale,
+                domain = {'x': [0, 1], 'y': [0, 1]},
+                title = {'text': "Sales Target Achievement", 'font': {'size': 20}},
+                delta = {'reference': target_val, 'increasing': {'color': "green"}, 'decreasing': {'color': "red"}},
+                gauge = {
+                    'axis': {'range': [None, target_val * 1.5], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                    'bar': {'color': "#1F4E79"},
+                    'bgcolor': "white",
+                    'borderwidth': 2,
+                    'bordercolor': "gray",
+                    'steps': [
+                        {'range': [0, target_val * 0.5], 'color': '#ffcdd2'},
+                        {'range': [target_val * 0.5, target_val * 0.9], 'color': '#fff9c4'},
+                        {'range': [target_val * 0.9, target_val * 1.5], 'color': '#c8e6c9'}],
+                    'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': target_val}
+                }
+            ))
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+    with tab_basket:
+        st.subheader("🛒 Market Basket (Categories bought together)")
+        if 'CATEGORY' in df_comp_kpi.columns and 'UNIQUE_BILL_ID' in df_comp_kpi.columns:
+            basket = df_comp_kpi.groupby(['UNIQUE_BILL_ID', 'CATEGORY'])['QTY'].sum().unstack().reset_index().fillna(0)
+            basket = basket.set_index('UNIQUE_BILL_ID')
+            basket_sets = (basket > 0).astype(int)
+            
+            if len(basket_sets.columns) > 1:
+                co_matrix = basket_sets.T.dot(basket_sets)
+                for i in range(len(co_matrix.columns)):
+                    co_matrix.iloc[i, i] = 0
+                
+                fig_matrix = px.imshow(co_matrix, text_auto=True, color_continuous_scale='Purples', 
+                                       aspect="auto", labels=dict(x="Category 1", y="Category 2", color="Co-occurrences"))
+                fig_matrix.update_layout(title="Cross-Selling Heatmap (Count of shared bills)")
+                st.plotly_chart(fig_matrix, use_container_width=True)
+            else:
+                st.info("Basket analysis ke liye ek se zyada category ka data hona zaruri hai.")
+        else:
+            st.warning("UNIQUE_BILL_ID ya CATEGORY column nahi mila.")
+
+    with tab_price:
+        st.subheader("📉 Price Sensitivity (Impact of Discount on Volume)")
+        if selected_disc_col and 'CATEGORY' in df_comp_kpi.columns:
+            sens_df = df_comp_kpi.groupby('CATEGORY').agg(SALE=('SALEVAL', 'sum'), QTY=('QTY', 'sum'), DISC=(selected_disc_col, 'sum')).reset_index()
+            sens_df['DISC'] = sens_df['DISC'].abs()
+            sens_df['Gross'] = sens_df['SALE'].abs() + sens_df['DISC']
+            sens_df['Disc %'] = (sens_df['DISC'] / sens_df['Gross'] * 100).fillna(0)
+            sens_df = sens_df[sens_df['QTY'] > 0]
+            
+            fig_scatter = px.scatter(sens_df, x='Disc %', y='QTY', size='SALE', color='CATEGORY', 
+                                     hover_name='CATEGORY', size_max=40, template='plotly_white')
+            fig_scatter.update_layout(title="Category-wise Volume elasticity against Discounts", 
+                                      xaxis_title="Average Discount %", yaxis_title="Total Qty Sold")
+            st.plotly_chart(fig_scatter, use_container_width=True)
+        else:
+            st.info("Global filters mein Discount column select karein.")
+
+    with tab_ai:
+        st.subheader("🔮 Predictive Sales Forecast (Next 15 Days)")
+        st.caption("Historical daily data ke base par AI-driven trend line.")
+        
+        daily_sales = df_comp_kpi.groupby(df_comp_kpi['BILLDATE'].dt.date)['SALEVAL'].sum().reset_index()
+        daily_sales.columns = ['Date', 'Actual_Sales']
+        
+        if len(daily_sales) > 5:
+            daily_sales['Date'] = pd.to_datetime(daily_sales['Date'])
+            last_date_ai = daily_sales['Date'].max()
+            future_dates = [last_date_ai + timedelta(days=i) for i in range(1, 16)]
+            
+            ewma_trend = daily_sales['Actual_Sales'].ewm(span=7, adjust=False).mean().iloc[-1]
+            
+            future_df = pd.DataFrame({'Date': future_dates, 'Forecast_Sales': [ewma_trend] * 15})
+            
+            fig_ai = go.Figure()
+            fig_ai.add_trace(go.Scatter(x=daily_sales['Date'], y=daily_sales['Actual_Sales'], mode='lines+markers', name='Actual Sales', line=dict(color='#1F4E79', width=2)))
+            fig_ai.add_trace(go.Scatter(x=future_df['Date'], y=future_df['Forecast_Sales'], mode='lines', name='AI Predicted Trend', line=dict(color='#E53935', width=2, dash='dash')))
+            
+            fig_ai.update_layout(title="Sales Trend & Near-Future Projection", xaxis_title="Date", yaxis_title="Sale Value", template='plotly_white')
+            st.plotly_chart(fig_ai, use_container_width=True)
+        else:
+            st.info("Forecasting algorithm ke liye kam se kam 5 din ka continuous data chahiye.")
+
+    with tab_report:
+        st.subheader("📩 Management Auto-Report System")
+        st.markdown("Is button par click karke aap direct Management ko dashboard ka summarized snap (Total Sale, Qty, Top Store) bhej sakte hain (Simulated).")
+        
+        report_email = st.text_input("Enter Boss/Manager Email ID:", "manager@company.com")
+        
+        if st.button("🚀 Trigger Management Email Report", type="primary"):
+            with st.spinner("Compiling insights and generating report..."):
+                import time
+                time.sleep(1.5)
+                
+                top_store_name = "N/A"
+                if 'CUSTOMERNAMEACTIVE' in df_comp_kpi.columns and not df_comp_kpi.empty:
+                    top_store_name = df_comp_kpi.groupby('CUSTOMERNAMEACTIVE')['SALEVAL'].sum().idxmax()
+                    
+                st.success(f"✅ Successfully sent to **{report_email}**!")
+                st.info(f"""
+                **Preview of Sent Email:**
+                - 📈 **Total TY Sale:** {format_indian_num(df_comp_kpi['SALEVAL'].sum(), True)}
+                - 📦 **Total TY Qty:** {format_indian_num(df_comp_kpi['QTY'].sum(), False)}
+                - 🏆 **Top Store:** {top_store_name}
+                - 📅 **Period:** {ty_start.strftime('%d %b %Y')} to {ty_end.strftime('%d %b %Y')}
+                """)
+
+# =====================================================================
+# ⚙️ VIP SUPER ADMIN CONTROL PANEL (ONLY FOR GOD)
+# =====================================================================
+if st.session_state.selected_user == "GOD (ADMIN)":
+    with tab_admin:
+        st.markdown("<h2 style='color:#D32F2F;'>⚙️ Super Admin Panel</h2>", unsafe_allow_html=True)
+        st.success("✅ Welcome GOD! Aap yahan se Dashboard ka poora system, Passwords aur Header Rights control kar sakte hain.")
+        
+        users_df_current = get_users_db()
+        
+        # 1. Password & Role Management
+        st.markdown("### 1. User & Password Management")
+        st.caption("Naya user banaiye, purana password badliya ya role change kijiye.")
+        edited_df = st.data_editor(
+            users_df_current[['Username', 'Password', 'Role']], 
+            num_rows="dynamic",
+            column_config={
+                "Username": st.column_config.TextColumn("👤 Username", required=True),
+                "Password": st.column_config.TextColumn("🔑 Password", required=True),
+                "Role": st.column_config.SelectboxColumn("🛡️ File Right", options=["ADMIN", "ALL", "AR", "FM"], required=True)
+            },
+            use_container_width=True
+        )
+        
+        # 2. Header (Column) Level Security
+        st.markdown("---")
+        st.markdown("### 2. Header (Column) Level Access Control")
+        st.caption("Chuniye kis user ko 'Mega Ledger' mein kaun se columns dikhane hain.")
+        
+        user_to_edit = st.selectbox("📌 Select User to manage columns:", users_df_current['Username'])
+        current_cols_raw = users_df_current.loc[users_df_current['Username'] == user_to_edit, 'Allowed_Columns'].values[0]
+        
+        all_cols_list = list(sheet_data.columns)
+        
+        if pd.isna(current_cols_raw) or current_cols_raw == "ALL":
+            default_sel = all_cols_list
+        else:
+            default_sel = [c.strip() for c in current_cols_raw.split(",") if c.strip() in all_cols_list]
+            
+        selected_header_rights = st.multiselect("👁️ Visible Columns for this user:", all_cols_list, default=default_sel)
+        
+        if st.button("💾 Save Admin Settings", type="primary"):
+            final_db = edited_df.copy()
+            final_db = final_db.merge(users_df_current[['Username', 'Allowed_Columns']], on='Username', how='left')
+            final_db['Allowed_Columns'] = final_db['Allowed_Columns'].fillna("ALL")
+            
+            if len(selected_header_rights) == len(all_cols_list) or len(selected_header_rights) == 0:
+                final_db.loc[final_db['Username'] == user_to_edit, 'Allowed_Columns'] = "ALL"
+            else:
+                final_db.loc[final_db['Username'] == user_to_edit, 'Allowed_Columns'] = ",".join(selected_header_rights)
+            
+            final_db.to_csv("users_db.csv", index=False)
+            st.success("🎉 User Settings & Header Rights successfully updated! (Apply karne ke liye dashboard reload karein)")
+            st.balloons()
