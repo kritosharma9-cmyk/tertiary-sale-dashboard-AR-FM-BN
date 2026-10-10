@@ -12,7 +12,12 @@ from datetime import datetime, timedelta
 # ==========================================
 # ⚙️ PAGE CONFIGURATION
 # ==========================================
-st.set_page_config(page_title="Tertiary Sale Dashboard", layout="wide", page_icon="📈")
+st.set_page_config(
+    page_title="Tertiary Sale Dashboard", 
+    layout="wide", 
+    page_icon="📈",
+    initial_sidebar_state="expanded"  # 👈 YE LINE SIDEBAR KO HAMESHA OPEN RAKHEGI
+)
 
 # ==========================================
 # 💾 1. DATABASES (USERS & SUGGESTIONS)
@@ -26,7 +31,8 @@ def get_users_db():
             "Role": ["ADMIN", "ALL", "ALL", "ALL", "ALL", "ALL", "ALL", "AR", "FM", "FM", "AR"],
             "Allowed_Columns": ["ALL"] * 11,
             "Allowed_Tabs": ["ALL"] * 11,
-            "Allowed_Features": ["ALL"] * 11
+            "Allowed_Features": ["ALL"] * 11,
+            "Allowed_Files": ["ALL", "ALL", "ALL", "ALL", "ALL", "ALL", "ALL", "TERTIARY_SALE AR.xlsx", "TERTIARY_SALE_FM.xlsx", "TERTIARY_SALE_FM.xlsx", "TERTIARY_SALE AR.xlsx"]
         }
         df = pd.DataFrame(default_data)
         df.to_csv(db_file, index=False)
@@ -36,6 +42,7 @@ def get_users_db():
         if 'Allowed_Columns' not in df.columns: df['Allowed_Columns'] = "ALL"
         if 'Allowed_Tabs' not in df.columns: df['Allowed_Tabs'] = "ALL"
         if 'Allowed_Features' not in df.columns: df['Allowed_Features'] = "ALL"
+        if 'Allowed_Files' not in df.columns: df['Allowed_Files'] = "ALL"
         return df
 
 def get_suggestions_db():
@@ -93,13 +100,17 @@ def check_password():
                         st.error("❌ Invalid Password")
     return False
 
-if not check_password(): st.stop()
+# 🛠️ FIXED: Side panel gayab hone ka issue yahan solve kiya gaya hai
+if not check_password(): 
+    st.sidebar.warning("🔒 Kripya pehle Dashboard mein login karein.")
+    st.stop()
 
 current_users_df = get_users_db()
 logged_in_user_row = current_users_df[current_users_df['Username'] == st.session_state.selected_user].iloc[0]
 allowed_columns_str = logged_in_user_row.get('Allowed_Columns', "ALL")
 allowed_tabs_str = logged_in_user_row.get('Allowed_Tabs', "ALL")
 allowed_features_str = logged_in_user_row.get('Allowed_Features', "ALL")
+allowed_files_str = logged_in_user_row.get('Allowed_Files', "ALL")
 
 def check_feature_access(feature_name):
     if pd.isna(allowed_features_str) or allowed_features_str == "ALL": return True
@@ -122,10 +133,7 @@ m_sequence = ['April', 'May', 'June', 'July', 'August', 'September', 'October', 
 
 st.markdown("""
 <style>
-    [data-testid="stToolbar"] {visibility: hidden !important;}
-    [data-testid="stHeader"] {visibility: hidden !important;}
-    #MainMenu {visibility: hidden !important;}
-    footer {visibility: hidden !important;}
+    /* Toolbar aur MainMenu ko hide karna hata diya gaya hai taaki sidebar toggle button dikhe */
     
     div:has(> #sticky-search) {
         position: -webkit-sticky;
@@ -143,7 +151,7 @@ st.markdown("""
     button[data-baseweb="tab"] {border: 2px solid #e0e0e0 !important; border-radius: 8px !important; padding: 10px 16px !important; margin: 5px !important; background-color: #f8f9fa !important; min-width: 140px !important; font-weight: bold !important; font-size: 15px !important;}
     button[data-baseweb="tab"][aria-selected="true"] {background-color: #1F4E79 !important; color: white !important; border-color: #1F4E79 !important;}
     div[data-testid="stTabs"] div[role="tablist"] {display: flex !important; flex-wrap: wrap !important; overflow-x: hidden !important;}
-    @media print { section[data-testid="stSidebar"], header[data-testid="stHeader"], .stButton, .stDownloadButton { display: none !important; } }
+    @media print { section[data-testid="stSidebar"], header, .stButton, .stDownloadButton { display: none !important; } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -287,26 +295,27 @@ with st.sidebar.expander("💡 Give Suggestion / Feedback", expanded=False):
         for _, s_row in my_sugs.iterrows():
             st.caption(f"📅 {s_row['Date']}")
             st.markdown(f"**You:** {s_row['Suggestion']}")
-            if str(s_row['Admin_Reply']).strip():
+            if str(s_row['Admin_Reply']).strip() and str(s_row['Admin_Reply']) != "nan":
                 st.markdown(f"<div style='color: #1F4E79; font-size:13px; font-style:italic;'><b>Admin Reply:</b> {s_row['Admin_Reply']}</div>", unsafe_allow_html=True)
             st.divider()
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🏢 Brand / Data Source")
 
-# 🔒 ROLE BASED FILE FILTERING
+# 🔒 STRICT FILE RESTRICTION LOGIC
 all_excel_files = [f for f in os.listdir() if f.endswith('.xlsx') and not f.startswith('~') and not f.startswith('backup_')]
 if not all_excel_files: st.sidebar.error("⚠️ Koi Excel (.xlsx) file nahi mili!"); st.stop()
 
-if st.session_state.user_role == "FM":
-    file_options = [f for f in all_excel_files if "FM" in f.upper()]
-elif st.session_state.user_role == "AR":
-    file_options = [f for f in all_excel_files if "AR" in f.upper()]
-else:
+if allowed_files_str == "ALL" or pd.isna(allowed_files_str):
     file_options = ["Combined (All Files)"] + all_excel_files
+else:
+    allowed_files_list = [f.strip() for f in allowed_files_str.split(",")]
+    file_options = [f for f in all_excel_files if f in allowed_files_list]
+    if not file_options and allowed_files_list:
+        file_options = allowed_files_list 
 
 if not file_options:
-    st.sidebar.error("⚠️ Aapke role ke hisaab se koi file nahi mili.")
+    st.sidebar.error("⚠️ Aapko kisi file ka access nahi diya gaya hai.")
     st.stop()
 
 if check_feature_access("File Selector"): selected_file = st.sidebar.selectbox("Select Excel File:", file_options)
@@ -318,7 +327,7 @@ if "cached_data" not in st.session_state or st.session_state.get("cached_file") 
         st.session_state.cached_file = selected_file
 sheet_data = st.session_state.cached_data
 
-if check_feature_access("Reload Data Button"):
+if check_feature_access("Reload Cache Button"):
     if st.sidebar.button("🔄 Force Reload Cache", use_container_width=True):
         st.cache_data.clear()
         st.session_state.cached_data = load_data(selected_file)
@@ -390,13 +399,22 @@ with st.sidebar.form(key='global_filter_form'):
 
     st.markdown("---")
     all_columns = list(sheet_data.columns)
-    guess_idx = next((i for i, c in enumerate(all_columns) if any(k in c for k in ['BILLNO', 'INVOICENO', 'BILL_NO', 'INVOICE_NO']) and c not in ['BILLDATE', 'MONTH_NAME', 'YEAR2']), 0)
-    selected_bill_col = st.selectbox("🧾 Select Bill/Invoice Column:", all_columns, index=guess_idx)
+    
+    guess_idx = next((i for i, c in enumerate(all_columns) if any(k in c for k in ['BILLNUMBER', 'BILL_NUMBER', 'BILLNO', 'INVOICENO', 'BILL_NO', 'INVOICE_NO', 'INV']) and c not in ['BILLDATE', 'MONTH_NAME', 'YEAR2']), 0)
+    
+    if check_feature_access("Bill Column Selector"):
+        selected_bill_col = st.selectbox("🧾 Select Bill/Invoice Column:", all_columns, index=guess_idx)
+    else:
+        selected_bill_col = all_columns[guess_idx]
     
     st.markdown("---")
     possible_disc_cols = [c for c in all_columns if any(k in c for k in ['DISC', 'DISCOUNT'])]
     guess_disc = next((i for i, c in enumerate(possible_disc_cols) if c in ['DISCOUNT', 'DISC'] or 'VALUE' in c), 0) if possible_disc_cols else 0
-    selected_disc_col = st.selectbox("🏷️ Select Discount Column:", possible_disc_cols, index=guess_disc) if possible_disc_cols else None
+    
+    if check_feature_access("Discount Column Selector"):
+        selected_disc_col = st.selectbox("🏷️ Select Discount Column:", possible_disc_cols, index=guess_disc) if possible_disc_cols else None
+    else:
+        selected_disc_col = possible_disc_cols[guess_disc] if possible_disc_cols else None
     
     st.markdown("---")
     filter_cols = ['MONTH_NAME', 'MANAGER', 'CATEGORY', 'FIT', 'SEASON', 'STATE', 'STATUS', 'EOSS/FRESH', 'FORMAL/CASUAL']
@@ -544,7 +562,6 @@ fy_hist['Disc Gr(%)'] = fy_hist['Discount %'] - fy_hist['Discount % LY']
 
 sale_html, qty_html, bills_html, doors_html, disc_html, abv_html, aqv_html, upt_html = "", "", "", "", "", "", "", ""
 
-# Restored HTML generation for Missing Metrics
 for fy_year, row in fy_hist.iterrows():
     fy_lbl = f"FY {str(fy_year)[-2:]}-{str(fy_year+1)[-2:]}"
     sale_html += make_fy_html(format_indian_num(row['SALEVAL'], True), row['Sale Gr(%)'], fy_lbl)
@@ -1779,33 +1796,44 @@ if "⚙️ Admin Control Panel" in tab_dict:
         )
         
         st.markdown("---")
-        st.markdown("### 2️⃣ Application Access Rules (Columns, Tabs, Features)")
-        st.caption("Select a specific user below to define what components they can see across the application.")
+        st.markdown("### 2️⃣ Application Access Rules (Columns, Tabs, Features, Files)")
+        st.caption("Select a specific user below to define exactly what components and files they can see.")
         
         user_to_edit = st.selectbox("📌 Select Target User to Manage Rules:", users_df_current['Username'])
         current_cols_raw = users_df_current.loc[users_df_current['Username'] == user_to_edit, 'Allowed_Columns'].values[0]
         current_tabs_raw = users_df_current.loc[users_df_current['Username'] == user_to_edit, 'Allowed_Tabs'].values[0]
         current_feat_raw = users_df_current.loc[users_df_current['Username'] == user_to_edit, 'Allowed_Features'].values[0]
         
+        if 'Allowed_Files' in users_df_current.columns: current_files_raw = users_df_current.loc[users_df_current['Username'] == user_to_edit, 'Allowed_Files'].values[0]
+        else: current_files_raw = "ALL"
+        
         all_cols_list = list(sheet_data.columns)
-        all_features_list = ["File Upload Feature", "File Selector", "Compare LY Toggle", "Quick Range Preset", "Reload Cache Button", "PDF Export Button"]
+        all_features_list = ["File Upload Feature", "File Selector", "Compare LY Toggle", "Quick Range Preset", "Reload Cache Button", "PDF Export Button", "Bill Column Selector", "Discount Column Selector"]
+        all_files_list = [f for f in os.listdir() if f.endswith('.xlsx') and not f.startswith('~') and not f.startswith('backup_')]
         
         def_cols = all_cols_list if pd.isna(current_cols_raw) or current_cols_raw == "ALL" else [c.strip() for c in current_cols_raw.split(",") if c.strip() in all_cols_list]
         def_tabs = MASTER_TABS if pd.isna(current_tabs_raw) or current_tabs_raw == "ALL" else [t.strip() for t in current_tabs_raw.split(",") if t.strip() in MASTER_TABS]
         def_feat = all_features_list if pd.isna(current_feat_raw) or current_feat_raw == "ALL" else [f.strip() for f in current_feat_raw.split(",") if f.strip() in all_features_list]
+        def_files = all_files_list if pd.isna(current_files_raw) or current_files_raw == "ALL" else [f.strip() for f in current_files_raw.split(",") if f.strip() in all_files_list]
 
-        a_col1, a_col2, a_col3 = st.columns(3)
+        a_col1, a_col2 = st.columns(2)
         with a_col1: selected_col_rights = st.multiselect("👁️ Permitted Headers (Mega Ledger):", all_cols_list, default=def_cols)
         with a_col2: selected_tab_rights = st.multiselect("📂 Permitted Dashboard Tabs:", MASTER_TABS, default=def_tabs)
+        
+        a_col3, a_col4 = st.columns(2)
         with a_col3: selected_feat_rights = st.multiselect("⚙️ Permitted Global Features:", all_features_list, default=def_feat)
+        with a_col4: selected_file_rights = st.multiselect("📁 Permitted Excel Files:", all_files_list, default=def_files)
         
         if st.button("💾 Enforce Security Settings (Save)", type="primary", use_container_width=True):
             final_db = edited_df.copy()
-            final_db = final_db.merge(users_df_current[['Username', 'Allowed_Columns', 'Allowed_Tabs', 'Allowed_Features']], on='Username', how='left')
+            if 'Allowed_Files' not in users_df_current.columns: users_df_current['Allowed_Files'] = "ALL"
+            
+            final_db = final_db.merge(users_df_current[['Username', 'Allowed_Columns', 'Allowed_Tabs', 'Allowed_Features', 'Allowed_Files']], on='Username', how='left')
             
             final_db.loc[final_db['Username'] == user_to_edit, 'Allowed_Columns'] = "ALL" if len(selected_col_rights) == len(all_cols_list) or not selected_col_rights else ",".join(selected_col_rights)
             final_db.loc[final_db['Username'] == user_to_edit, 'Allowed_Tabs'] = "ALL" if len(selected_tab_rights) == len(MASTER_TABS) or not selected_tab_rights else ",".join(selected_tab_rights)
             final_db.loc[final_db['Username'] == user_to_edit, 'Allowed_Features'] = "ALL" if len(selected_feat_rights) == len(all_features_list) or not selected_feat_rights else ",".join(selected_feat_rights)
+            final_db.loc[final_db['Username'] == user_to_edit, 'Allowed_Files'] = "ALL" if len(selected_file_rights) == len(all_files_list) or not selected_file_rights else ",".join(selected_file_rights)
             
             final_db.to_csv("users_db.csv", index=False)
             st.success("🎉 Global Security & Access Rules Updated Successfully! (Refresh Dashboard to apply changes)")
@@ -1825,7 +1853,7 @@ if "⚙️ Admin Control Panel" in tab_dict:
                         st.markdown(f"**Suggestion:** {row['Suggestion']}")
                         st.caption(f"From: {row['Username']} | Date: {row['Date']}")
                         
-                        reply_text = st.text_input(f"Reply to {row['Username']}:", value=row['Admin_Reply'], key=f"reply_{row['ID']}")
+                        reply_text = st.text_input(f"Reply to {row['Username']}:", value=row['Admin_Reply'] if not pd.isna(row['Admin_Reply']) else "", key=f"reply_{row['ID']}")
                         if st.button("📤 Send Reply", key=f"btn_{row['ID']}"):
                             save_admin_reply(row['ID'], reply_text)
                             st.success("✅ Reply sent to user!")
