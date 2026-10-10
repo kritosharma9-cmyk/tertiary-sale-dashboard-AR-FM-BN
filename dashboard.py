@@ -194,11 +194,24 @@ def clean_df_for_single_mode(df, b_y):
 # 🚀 CACHE DATA ENABLED
 @st.cache_data
 def load_data(file_name):
-    try:
-        df = pd.read_excel(file_name, engine='openpyxl')
-    except FileNotFoundError:
-        st.error(f"⚠️ {file_name} nahi mili.")
-        st.stop()
+    if file_name == "Combined (All Files)":
+        files_to_load = [f for f in os.listdir() if f.endswith('.xlsx') and not f.startswith('~') and not f.startswith('backup_')]
+        df_list = []
+        for f in files_to_load:
+            try:
+                df_list.append(pd.read_excel(f, engine='openpyxl'))
+            except:
+                pass
+        if not df_list:
+            st.error("❌ No valid Excel files found in the directory.")
+            st.stop()
+        df = pd.concat(df_list, ignore_index=True)
+    else:
+        try:
+            df = pd.read_excel(file_name, engine='openpyxl')
+        except FileNotFoundError:
+            st.error(f"⚠️ {file_name} nahi mili.")
+            st.stop()
         
     df.columns = df.columns.str.strip().str.upper()
     df['SALEVAL'] = pd.to_numeric(df['SALEVAL'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
@@ -227,11 +240,15 @@ def load_data(file_name):
         
         df.loc[mask_anomaly, 'SALEVAL'] = 0
         df.loc[mask_anomaly, 'QTY'] = 0
-        for dc in disc_like_cols:
+for dc in disc_like_cols:
             df.loc[mask_anomaly, dc] = 0
             
+    # 🚫 CATEGORY EXCLUDE LOGIC
+    exclude_items = ["BAGS DUFFLE BAG", "BAGS", "SUITCOVERS", "TROLLEY BAG", "DUFFLE BAG", "BAG-LEATHERS","ARROW-MENS WESTERN-COMBO SET","DUFFEL TROLLEY BAG","LAPTOP BACKPACK"]
+    if 'CATEGORY' in df.columns:
+        df = df[~df['CATEGORY'].isin(exclude_items)]
+            
     return df
-
 def style_dataframe(df):
     sale_props = {'background-color': '#d4edda', 'border': '1px solid #28a745'}
     growth_props = {'background-color': '#ebf7ed', 'border': '1px solid #a9d08e'}
@@ -281,8 +298,17 @@ def make_fy_html(val_str, gr_val, label, is_disc=False):
 wrapper = "<div style='margin-top: -15px;'>{}</div>"
 
 # ==========================================
-# 🏢 BRAND / FILE SELECTOR (ORIGINAL SIDEBAR)
+# 🏢 BRAND / FILE SELECTOR & FAST CACHE SYSTEM
 # ==========================================
+st.sidebar.markdown(f"### 👤 Logged in as: `{st.session_state.selected_user}`")
+
+if st.sidebar.button("🚪 Logout App", use_container_width=True, type="primary"):
+    st.session_state.password_correct = False
+    st.session_state.user_role = None
+    st.session_state.selected_user = None
+    st.rerun()
+
+st.sidebar.markdown("---")
 st.sidebar.markdown("### 🏢 Brand / Data Source")
 available_files = [f for f in os.listdir() if f.endswith('.xlsx') and not f.startswith('~') and not f.startswith('backup_')]
 
@@ -290,10 +316,8 @@ if not available_files:
     st.error("⚠️ Koi Excel (.xlsx) file nahi mili is folder mein! Kripya Excel files upload karein.")
     st.stop()
 
-# File Selector logic controlled by Admin Rights
-if check_feature_access("File Selector"):
-    selected_file = st.sidebar.selectbox("Select Excel File:", available_files)
-else:
+file_options = ["Combined (All Files)"] + available_files
+selected_file = st.sidebar.selectbox("Select Excel File:", file_options)else:
     selected_file = available_files[0]
     st.sidebar.info(f"Fixed View: {selected_file}")
 
@@ -444,9 +468,8 @@ with st.sidebar.form(key='global_filter_form'):
     else:
         selected_disc_col = None
     
-    st.markdown("---")
-    search_cust = st.text_input("🔍 Search Customer Name:").strip().upper()
-    
+  st.markdown("---")
+    search_cust = st.text_input("🔍 Search Customer Name:").strip().upper()  
     filter_cols = ['MONTH_NAME', 'CUSTOMERNAMEACTIVE', 'MANAGER', 'CATEGORY', 'FIT', 'SEASON', 'STATE', 'STATUS', 'EOSS/FRESH', 'FORMAL/CASUAL']
     selected_filters = {}
     
@@ -471,6 +494,35 @@ if check_feature_access("PDF Export Button"):
             height=0
         )
     st.sidebar.caption("💡 Tip: Jab Print window aaye, toh Destination ko 'Save as PDF' aur Layout ko 'Landscape' select karein.")
+# ==========================================
+# 🔍 STICKY SEARCH BAR & SUMMARY HEADER
+# ==========================================
+st.markdown("""
+<style>
+    div:has(> #sticky-search) {
+        position: -webkit-sticky;
+        position: sticky;
+        top: 0px;
+        z-index: 999;
+        background-color: white;
+        padding: 10px 15px;
+        border-bottom: 3px solid #1F4E79;
+        border-radius: 8px;
+        box-shadow: 0px 4px 8px rgba(0,0,0,0.08);
+        margin-bottom: 15px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div id="sticky-search"></div>', unsafe_allow_html=True)
+with st.container():
+    c_s1, c_s2 = st.columns([3, 1])
+    with c_s1:
+        hdr_title = f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')} vs LY)" if compare_mode else f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')})"
+        st.markdown(hdr_title)
+    with c_s2:
+        search_cust = st.text_input("🔍 Search Customer Name:", placeholder="Type to filter...").strip().upper()
+
 # Application of Filters
 filtered_df = sheet_data.copy()
 
@@ -555,8 +607,20 @@ d_comp_ytd_g, d_base_ytd_g = df_ytd_comp['CUSTOMERNAMEACTIVE'].nunique() if 'CUS
 st.markdown('<div id="sticky-summary-anchor"></div>', unsafe_allow_html=True)
 
 with st.container():
-    hdr_title = f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')} vs LY)" if compare_mode else f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')})"
-    st.markdown(hdr_title)
+   # 🔍 STICKY SEARCH BAR & TITLE (Yellow Box)
+    c_s1, c_s2 = st.columns([3, 1])
+    with c_s1:
+        hdr_title = f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')} vs LY)" if compare_mode else f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')})"
+        st.markdown(hdr_title)
+    with c_s2:
+        search_cust = st.text_input("🔍 Search Customer Name:", placeholder="Type to filter...", label_visibility="collapsed").strip().upper()
+
+    # Apply Search Filter dynamically
+    if search_cust:
+        df_comp_kpi = df_comp_kpi[df_comp_kpi['CUSTOMERNAMEACTIVE'].astype(str).str.contains(search_cust, case=False, na=False)]
+        df_base_kpi = df_base_kpi[df_base_kpi['CUSTOMERNAMEACTIVE'].astype(str).str.contains(search_cust, case=False, na=False)]
+        df_ytd_global = df_ytd_global[df_ytd_global['CUSTOMERNAMEACTIVE'].astype(str).str.contains(search_cust, case=False, na=False)]
+        filtered_df = filtered_df[filtered_df['CUSTOMERNAMEACTIVE'].astype(str).str.contains(search_cust, case=False, na=False)]
 
     df_comp_perf = df_comp_kpi.copy()
     df_base_perf = df_base_kpi.copy()
