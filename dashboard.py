@@ -190,7 +190,6 @@ def clean_df_for_single_mode(df, b_y):
             continue
         cols_to_keep.append(c)
     return df[cols_to_keep]
-
 # 🚀 CACHE DATA ENABLED
 @st.cache_data
 def load_data(file_name):
@@ -223,16 +222,16 @@ def load_data(file_name):
 
     df['BILLDATE'] = pd.to_datetime(df['BILLDATE'], errors='coerce').fillna(pd.to_datetime('2000-01-01'))
     df['MONTH_NAME'] = df['BILLDATE'].dt.strftime('%B')
-    df['YEAR2'] = df['YEAR2'].astype(str)
+    if 'YEAR2' in df.columns:
+        df['YEAR2'] = df['YEAR2'].astype(str)
     
     text_cols = ['FORMAL/CASUAL', 'EOSS/FRESH', 'SEASON', 'FIT', 'CATEGORY', 'MANAGER', 'STATE', 'STATUS', 'CUSTOMERNAMEACTIVE']
     for col in text_cols:
         if col in df.columns:
             df[col] = df[col].astype(str).replace(r'[\xa0\t\n\r]', ' ', regex=True)
-            df[col] = df[col].str.replace(r'\s+', ' ', regex=True)
-            df[col] = df[col].str.strip().str.upper()
+            df[col] = df[col].str.replace(r'\s+', ' ', regex=True).str.strip().str.upper()
             
-   if 'CUSTOMERNAMEACTIVE' in df.columns:
+    if 'CUSTOMERNAMEACTIVE' in df.columns:
         current_time = datetime.now()
         mask_anomaly = (df['CUSTOMERNAMEACTIVE'].str.contains('MOM', na=False)) & \
                        ((df['BILLDATE'].dt.year > current_time.year) | \
@@ -242,10 +241,12 @@ def load_data(file_name):
         for dc in disc_like_cols:
             df.loc[mask_anomaly, dc] = 0
 
-    exclude_items = ["BAGS DUFFLE BAG", "BAGS", "SUITCOVERS", "TROLLEY BAG", "DUFFLE BAG", "BAG-LEATHERS", "ARROW-MENS WESTERN-COMBO SET", "DUFFEL TROLLEY BAG", "LAPTOP BACKPACK"]
+    # 🚫 CATEGORY EXCLUSION LOGIC
+    exclude_items = ["ARROW-MENS WESTERN-COMBO SET", "DUFFEL TROLLEY BAG", "DUFFLE BAG", "LAPTOP BACKPACK", "TROLLEY BAG", "BAGS DUFFLE BAG", "BAGS", "SUITCOVERS", "BAG-LEATHERS"]
     if 'CATEGORY' in df.columns:
         df = df[~df['CATEGORY'].isin(exclude_items)]
-        
+    
+    # 🩹 ARROW FIX: Convert object columns to string to prevent PyArrow Mixed Type errors
     for col in df.columns:
         if df[col].dtype == 'object':
             df[col] = df[col].astype(str)
