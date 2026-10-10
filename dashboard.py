@@ -6,13 +6,16 @@ import plotly.graph_objects as go
 import io
 import os
 import shutil
+import time
 from datetime import datetime, timedelta
 
-# Page Configuration
+# ==========================================
+# ⚙️ PAGE CONFIGURATION
+# ==========================================
 st.set_page_config(page_title="Tertiary Sale Dashboard", layout="wide", page_icon="📈")
 
 # ==========================================
-# 💾 1. USER DATABASE & RIGHTS LOGIC
+# 💾 1. DATABASES (USERS & SUGGESTIONS)
 # ==========================================
 def get_users_db():
     db_file = "users_db.csv"
@@ -35,19 +38,35 @@ def get_users_db():
         if 'Allowed_Features' not in df.columns: df['Allowed_Features'] = "ALL"
         return df
 
+def get_suggestions_db():
+    db_file = "suggestions_db.csv"
+    if not os.path.exists(db_file):
+        df = pd.DataFrame(columns=["ID", "Date", "Username", "Suggestion", "Admin_Reply"])
+        df.to_csv(db_file, index=False)
+        return df
+    return pd.read_csv(db_file)
+
+def save_suggestion(username, text):
+    df = get_suggestions_db()
+    new_id = len(df) + 1
+    new_row = {"ID": new_id, "Date": datetime.now().strftime("%d-%b-%Y %I:%M %p"), "Username": username, "Suggestion": text, "Admin_Reply": ""}
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df.to_csv("suggestions_db.csv", index=False)
+
+def save_admin_reply(s_id, reply):
+    df = get_suggestions_db()
+    df.loc[df["ID"] == s_id, "Admin_Reply"] = reply
+    df.to_csv("suggestions_db.csv", index=False)
+
 # ==========================================
 # 🔒 2. SECURITY ACCESS SYSTEM
 # ==========================================
 def check_password():
-    if "password_correct" not in st.session_state:
-        st.session_state.password_correct = False
-    if "user_role" not in st.session_state:
-        st.session_state.user_role = None
-    if "selected_user" not in st.session_state:
-        st.session_state.selected_user = None
+    if "password_correct" not in st.session_state: st.session_state.password_correct = False
+    if "user_role" not in st.session_state: st.session_state.user_role = None
+    if "selected_user" not in st.session_state: st.session_state.selected_user = None
 
-    if st.session_state.password_correct:
-        return True
+    if st.session_state.password_correct: return True
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -55,7 +74,6 @@ def check_password():
     with col2:
         with st.container(border=True):
             st.markdown("<h2 style='text-align: center;'>🔐 Dashboard Login</h2>", unsafe_allow_html=True)
-            
             users_df = get_users_db()
             usernames_list = ["-- Apna Naam Select Karein --"] + users_df['Username'].tolist()
             sel_user = st.selectbox("👤 Username:", usernames_list)
@@ -75,10 +93,8 @@ def check_password():
                         st.error("❌ Invalid Password")
     return False
 
-if not check_password():
-    st.stop()
+if not check_password(): st.stop()
 
-# Fetch Active User Rights
 current_users_df = get_users_db()
 logged_in_user_row = current_users_df[current_users_df['Username'] == st.session_state.selected_user].iloc[0]
 allowed_columns_str = logged_in_user_row.get('Allowed_Columns', "ALL")
@@ -96,412 +112,21 @@ def check_tab_access(tab_name):
     return tab_name in [t.strip() for t in allowed_tabs_str.split(",")]
 
 # ==========================================
-# 📊 MAIN DASHBOARD
+# 📊 3. MAIN DASHBOARD GLOBALS & CSS
 # ==========================================
 st.title("Tertiary Sale Dashboard 📊")
-
-# ==========================================
-# 📆 GLOBAL SCOPE: DYNAMIC TIME & SEQUENCE LOGIC
-# ==========================================
 today = datetime.now()
 target_date = today - timedelta(days=1)
 current_month_num = target_date.month
-current_day_limit = target_date.day
-current_date_str = target_date.strftime("%d-%b")
-
-passed_months = [m for m in range(4, 13) if m < current_month_num] if current_month_num >= 4 else [m for m in range(4, 13)] + [m for m in range(1, current_month_num)]
-
 m_sequence = ['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March']
 
-months_to_show = []
-temp_date = datetime(2025, 4, 1)
-while len(months_to_show) < 4:
-    if temp_date.month == current_month_num:
-        months_to_show.append(temp_date.strftime('%B'))
-        break
-    months_to_show.append(temp_date.strftime('%B'))
-    temp_date = (temp_date.replace(day=1) + timedelta(days=32)).replace(day=1)
-    if len(months_to_show) == 4: break
-
-# Custom CSS for Tabs & Print Layout
 st.markdown("""
 <style>
-    button[data-baseweb="tab"] {
-        border: 2px solid #e0e0e0 !important;
-        border-radius: 8px !important;
-        padding: 10px 16px !important;
-        margin: 5px !important;
-        background-color: #f8f9fa !important;
-        min-width: 140px !important;
-        font-weight: bold !important;
-        font-size: 15px !important;
-    }
-    button[data-baseweb="tab"][aria-selected="true"] {
-        background-color: #1F4E79 !important;
-        color: white !important;
-        border-color: #1F4E79 !important;
-    }
-    div[data-testid="stTabs"] div[role="tablist"] {
-        display: flex !important;
-        flex-wrap: wrap !important;
-        overflow-x: hidden !important;
-    }
+    [data-testid="stToolbar"] {visibility: hidden !important;}
+    [data-testid="stHeader"] {visibility: hidden !important;}
+    #MainMenu {visibility: hidden !important;}
+    footer {visibility: hidden !important;}
     
-    /* PDF Print Optimization */
-    @media print {
-        section[data-testid="stSidebar"] { display: none !important; }
-        header[data-testid="stHeader"] { display: none !important; }
-        .stButton { display: none !important; }
-        .stDownloadButton { display: none !important; }
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Download Function
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Data')
-    return output.getvalue()
-
-def format_indian_num(val, is_currency=False, prefix="₹"):
-    if not isinstance(val, (int, float, np.number)) or pd.isna(val):
-        return str(val)
-    is_negative = val < 0
-    val = abs(val)
-    s = f"{val:.0f}"
-    if len(s) <= 3:
-        res = s
-    else:
-        res = s[-3:]
-        remaining = s[:-3]
-        while remaining:
-            res = remaining[-2:] + "," + res
-            remaining = remaining[:-2]
-    if is_negative:
-        res = "-" + res
-    return f"{prefix}{res}" if is_currency else res
-
-def clean_df_for_single_mode(df, b_y):
-    cols_to_keep = []
-    for c in df.columns:
-        c_str = str(c)
-        if b_y in c_str or 'Gr(%)' in c_str or 'GR(%)' in c_str or 'LY ' in c_str or c_str.startswith('LY_'):
-            continue
-        cols_to_keep.append(c)
-    return df[cols_to_keep]
-# 🚀 CACHE DATA ENABLED
-@st.cache_data
-def load_data(file_name):
-    if file_name == "Combined (All Files)":
-        files_to_load = [f for f in os.listdir() if f.endswith('.xlsx') and not f.startswith('~') and not f.startswith('backup_')]
-        df_list = []
-        for f in files_to_load:
-            try:
-                df_list.append(pd.read_excel(f, engine='openpyxl'))
-            except:
-                pass
-        if not df_list:
-            st.error("❌ No valid Excel files found in the directory.")
-            st.stop()
-        df = pd.concat(df_list, ignore_index=True)
-    else:
-        try:
-            df = pd.read_excel(file_name, engine='openpyxl')
-        except FileNotFoundError:
-            st.error(f"⚠️ {file_name} nahi mili.")
-            st.stop()
-        
-    df.columns = df.columns.str.strip().str.upper()
-    df['SALEVAL'] = pd.to_numeric(df['SALEVAL'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
-    df['QTY'] = pd.to_numeric(df['QTY'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
-    
-    disc_like_cols = [c for c in df.columns if any(k in c for k in ['DISC', 'DISCOUNT'])]
-    for dc in disc_like_cols:
-        df[dc] = pd.to_numeric(df[dc].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
-
-    df['BILLDATE'] = pd.to_datetime(df['BILLDATE'], errors='coerce').fillna(pd.to_datetime('2000-01-01'))
-    df['MONTH_NAME'] = df['BILLDATE'].dt.strftime('%B')
-    if 'YEAR2' in df.columns:
-        df['YEAR2'] = df['YEAR2'].astype(str)
-    
-    text_cols = ['FORMAL/CASUAL', 'EOSS/FRESH', 'SEASON', 'FIT', 'CATEGORY', 'MANAGER', 'STATE', 'STATUS', 'CUSTOMERNAMEACTIVE']
-    for col in text_cols:
-        if col in df.columns:
-            df[col] = df[col].astype(str).replace(r'[\xa0\t\n\r]', ' ', regex=True)
-            df[col] = df[col].str.replace(r'\s+', ' ', regex=True).str.strip().str.upper()
-            
-    if 'CUSTOMERNAMEACTIVE' in df.columns:
-        current_time = datetime.now()
-        mask_anomaly = (df['CUSTOMERNAMEACTIVE'].str.contains('MOM', na=False)) & \
-                       ((df['BILLDATE'].dt.year > current_time.year) | \
-                        ((df['BILLDATE'].dt.year == current_time.year) & (df['BILLDATE'].dt.month > current_time.month)))
-        df.loc[mask_anomaly, 'SALEVAL'] = 0
-        df.loc[mask_anomaly, 'QTY'] = 0
-        for dc in disc_like_cols:
-            df.loc[mask_anomaly, dc] = 0
-
-    # 🚫 CATEGORY EXCLUSION LOGIC
-    exclude_items = ["ARROW-MENS WESTERN-COMBO SET", "DUFFEL TROLLEY BAG", "DUFFLE BAG", "LAPTOP BACKPACK", "TROLLEY BAG", "BAGS DUFFLE BAG", "BAGS", "SUITCOVERS", "BAG-LEATHERS"]
-    if 'CATEGORY' in df.columns:
-        df = df[~df['CATEGORY'].isin(exclude_items)]
-    
-    # 🩹 ARROW FIX: Convert object columns to string to prevent PyArrow Mixed Type errors
-    for col in df.columns:
-        if df[col].dtype == 'object':
-            df[col] = df[col].astype(str)
-            
-    return df
-def style_dataframe(df):
-    sale_props = {'background-color': '#d4edda', 'border': '1px solid #28a745'}
-    growth_props = {'background-color': '#ebf7ed', 'border': '1px solid #a9d08e'}
-    styler = df.style.hide(axis="index")
-    for col in df.columns:
-        if 'GR(%)' in col.upper():
-            styler = styler.set_properties(**growth_props, subset=[col])
-        elif 'SALE' in col.upper() or ('LEDGER' in col.upper() and 'QTY' not in col.upper()):
-            styler = styler.set_properties(**sale_props, subset=[col])
-    return styler
-
-def calc_growth(base, comp):
-    if base == 0:
-        if comp == 0: return 0.0
-        return np.inf if comp > 0 else np.nan
-    return (comp - base) / base * 100
-
-def calc_growth_series(base_s, comp_s):
-    base_s = base_s.astype(float)
-    comp_s = comp_s.astype(float)
-    with np.errstate(divide='ignore', invalid='ignore'):
-        result = (comp_s - base_s) / base_s.replace(0, np.nan) * 100
-    zero_base = base_s == 0
-    result = result.mask(zero_base & (comp_s == 0), 0.0)
-    result = result.mask(zero_base & (comp_s > 0), np.inf)
-    return result
-
-def format_cell(x, col_name):
-    if not isinstance(x, (int, float, np.number)): return x
-    if "Gr(%)" in col_name:
-        if x == np.inf: return "🆕 New"
-        if pd.isna(x): return "N/A"
-        return f"📈 🟢 {x:.0f}%" if x > 0 else f"📉 🔴 {abs(x):.0f}%" if x < 0 else "➖ 0%"
-    if pd.isna(x): return "N/A"
-    if "SALE" in col_name.upper() or ("LEDGER" in col_name.upper() and "QTY" not in col_name.upper()):
-        return format_indian_num(x, is_currency=True)
-    return format_indian_num(x, is_currency=False)
-
-def make_fy_html(val_str, gr_val, label, is_disc=False):
-    if pd.isna(gr_val):
-        gr_html = ""
-    else:
-        fc = "#28a745" if (gr_val <= 0 if is_disc else gr_val >= 0) else "#dc3545"
-        gr_html = f" (<span style='color: {fc}; font-weight:bold;'>{gr_val:+.1f}%</span>)"
-    return f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'><b>{label}:</b> {val_str}{gr_html}</div>"
-
-wrapper = "<div style='margin-top: -15px;'>{}</div>"
-
-# ==========================================
-# 🏢 BRAND / FILE SELECTOR & FAST CACHE SYSTEM
-# ==========================================
-st.sidebar.markdown(f"### 👤 Logged in as: `{st.session_state.selected_user}`")
-
-if st.sidebar.button("🚪 Logout App", use_container_width=True, type="primary"):
-    st.session_state.password_correct = False
-    st.session_state.user_role = None
-    st.session_state.selected_user = None
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🏢 Brand / Data Source")
-available_files = [f for f in os.listdir() if f.endswith('.xlsx') and not f.startswith('~') and not f.startswith('backup_')]
-
-if not available_files:
-    st.error("⚠️ Koi Excel (.xlsx) file nahi mili is folder mein! Kripya Excel files upload karein.")
-    st.stop()
-
-file_options = ["Combined (All Files)"] + available_files
-selected_file = st.sidebar.selectbox("Select Excel File:", file_options)else:
-    selected_file = available_files[0]
-    st.sidebar.info(f"Fixed View: {selected_file}")
-
-# Strict Ram Memory Lock
-if "cached_data" not in st.session_state or st.session_state.get("cached_file") != selected_file:
-    with st.spinner("🚀 Loading Data into Fast Cache..."):
-        st.session_state.cached_data = load_data(selected_file)
-        st.session_state.cached_file = selected_file
-
-sheet_data = st.session_state.cached_data
-
-# Reload Data logic controlled by Admin Rights
-if check_feature_access("Reload Data Button"):
-    if st.sidebar.button("🔄 Force Reload / Refresh Data", use_container_width=True):
-        with st.spinner("🔄 Refreshing Data into Fast Cache..."):
-            st.cache_data.clear()
-            st.session_state.cached_data = load_data(selected_file)
-        st.rerun()
-    st.sidebar.caption("Data RAM mein locked hai (Super Fast). Naya data dekhne ke liye 'Force Reload' dabayein.")
-
-# ==========================================
-# 📤 APPEND / UPDATE NEW DATA (ORIGINAL SIDEBAR)
-# ==========================================
-if check_feature_access("File Upload Feature"):
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(f"### 📤 Add New Sales to: {selected_file}")
-    st.sidebar.caption("Yahan nayi Excel upload karein. Iska data upar select ki gayi file mein automatic add ho jayega.")
-
-    backup_file = f"backup_{selected_file}"
-    uploaded_file = st.sidebar.file_uploader("Upload New Month Sales (.xlsx)", type=['xlsx'])
-
-    if uploaded_file is not None:
-        if st.sidebar.button("Merge & Update Data 🚀", use_container_width=True):
-            try:
-                with st.spinner('Data merge ho raha hai...'):
-                    shutil.copyfile(selected_file, backup_file)
-                    df_existing = pd.read_excel(selected_file, engine='openpyxl')
-                    df_new = pd.read_excel(uploaded_file, engine='openpyxl')
-                    df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-                    df_combined.drop_duplicates(inplace=True)
-                    df_combined.to_excel(selected_file, index=False, engine='openpyxl')
-                    
-                    st.session_state.cached_data = load_data(selected_file)
-                    
-                st.sidebar.success(f"✅ Nayi sale ka data '{selected_file}' mein successfully add ho gaya!")
-                st.rerun()
-                
-            except Exception as e:
-                st.sidebar.error(f"❌ Error aaya: {e}")
-
-    if os.path.exists(backup_file):
-        st.sidebar.markdown("---")
-        st.sidebar.warning("⚠️ Kya aapse galat file update ho gayi thi?")
-        if st.sidebar.button("Undo Last Upload ↩️ (Restore)", use_container_width=True):
-            try:
-                shutil.copyfile(backup_file, selected_file)
-                os.remove(backup_file)
-                st.session_state.cached_data = load_data(selected_file)
-                st.sidebar.success("✅ Undo successful! Purana data wapas aa gaya hai.")
-                st.rerun()
-            except Exception as e:
-                st.sidebar.error(f"❌ Undo fail ho gaya: {e}")
-
-# ==========================================
-# 🔍 SIDEBAR FILTERS FORM (ORIGINAL SIDEBAR)
-# ==========================================
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎯 Global Filters")
-
-with st.sidebar.form(key='global_filter_form'):
-    
-    # Checkbox to Toggle Comparison Mode
-    if check_feature_access("Compare LY Toggle"): compare_mode = st.checkbox("🔄 Enable Comparison (LY)", value=True)
-    else: compare_mode = False
-    
-    st.markdown("**⚡ Quick Range Shortcut**")
-    if check_feature_access("Quick Range Preset"): shortcut = st.selectbox("Select Preset:", ["None (Use Custom Dates Below)", "This Month", "Last Month", "Year-to-Date (YTD)"])
-    else: shortcut = "None (Use Custom Dates Below)"
-
-    st.markdown("**1. Selected Period (Target/TY)**")
-    col_d1, col_d2 = st.columns(2)
-    
-    if shortcut == "This Month":
-        def_ty_start = today.replace(day=1)
-        def_ty_end = today
-    elif shortcut == "Last Month":
-        first_day_this_month = today.replace(day=1)
-        def_ty_end = first_day_this_month - timedelta(days=1)
-        def_ty_start = def_ty_end.replace(day=1)
-    elif shortcut == "Year-to-Date (YTD)":
-        def_ty_start = datetime(today.year if today.month >= 4 else today.year - 1, 4, 1)
-        def_ty_end = today
-    else:
-        def_ty_start = datetime(today.year, today.month, 1)
-        def_ty_end = today
-
-    ty_start = col_d1.date_input("Start Date (TY)", def_ty_start)
-    ty_end = col_d2.date_input("End Date (TY)", def_ty_end)
-    
-    if compare_mode:
-        st.markdown("**2. Base Period (Last Year/LY)**")
-        col_d3, col_d4 = st.columns(2)
-        try: ly_start_default = ty_start.replace(year=ty_start.year - 1)
-        except ValueError: ly_start_default = ty_start.replace(year=ty_start.year - 1, day=28)
-            
-        try: ly_end_default = ty_end.replace(year=ty_end.year - 1)
-        except ValueError: ly_end_default = ty_end.replace(year=ty_end.year - 1, day=28)
-        
-        ly_start = col_d3.date_input("Start Date (LY)", ly_start_default)
-        ly_end = col_d4.date_input("End Date (LY)", ly_end_default)
-    else:
-        ly_start = ty_start
-        ly_end = ty_end
-    
-    ty_start_dt = pd.to_datetime(ty_start)
-    ty_end_dt = pd.to_datetime(ty_end)
-    ly_start_dt = pd.to_datetime(ly_start)
-    ly_end_dt = pd.to_datetime(ly_end)
-    
-    comp_y = str(ty_start.year)
-    base_y = str(ly_start.year) if compare_mode else "N/A_LY"
-    
-    if comp_y == base_y and compare_mode:
-        comp_y = comp_y + " (TY)"
-        base_y = base_y + " (LY)"
-
-    st.markdown("---")
-    
-    all_columns = list(sheet_data.columns)
-    guess_idx = 0
-    for i, c in enumerate(all_columns):
-        if c in ['BILLDATE', 'MONTH_NAME', 'YEAR2']:
-            continue
-        if any(k in c for k in ['BILLNO', 'INVOICENO', 'BILL_NO', 'INVOICE_NO', 'BILL NO', 'INVOICE NO', 'BILL', 'INVOICE', 'NUMBER', 'INV']):
-            guess_idx = i
-            break
-    selected_bill_col = st.selectbox("🧾 Select Bill/Invoice Column:", all_columns, index=guess_idx)
-    
-    st.markdown("---")
-    possible_disc_cols = [c for c in all_columns if any(k in c for k in ['DISC', 'DISCOUNT'])]
-    if possible_disc_cols:
-        guess_disc = 0
-        for i, c in enumerate(possible_disc_cols):
-            if c == 'DISCOUNT' or c == 'DISC' or 'VALUE' in c:
-                guess_disc = i
-                break
-        selected_disc_col = st.selectbox("🏷️ Select Discount Column:", possible_disc_cols, index=guess_disc)
-    else:
-        selected_disc_col = None
-    
-  st.markdown("---")
-    search_cust = st.text_input("🔍 Search Customer Name:").strip().upper()  
-    filter_cols = ['MONTH_NAME', 'CUSTOMERNAMEACTIVE', 'MANAGER', 'CATEGORY', 'FIT', 'SEASON', 'STATE', 'STATUS', 'EOSS/FRESH', 'FORMAL/CASUAL']
-    selected_filters = {}
-    
-    for col in filter_cols:
-        if col in sheet_data.columns:
-            unique_vals = sorted([str(x) for x in sheet_data[col].dropna().unique()])
-            selected_filters[col] = st.multiselect(f"Filter by {col.replace('_', ' ').title()}:", unique_vals, default=None)
-            
-    submit_button = st.form_submit_button(label='Apply Filters 🚀', use_container_width=True)
-
-# 📄 PDF DOWNLOADER BUTTON
-if check_feature_access("PDF Export Button"):
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📄 Export to PDF")
-    if st.sidebar.button("🖨️ Save Dashboard as PDF", use_container_width=True, type="primary"):
-        st.components.v1.html(
-            """
-            <script>
-                window.parent.print();
-            </script>
-            """,
-            height=0
-        )
-    st.sidebar.caption("💡 Tip: Jab Print window aaye, toh Destination ko 'Save as PDF' aur Layout ko 'Landscape' select karein.")
-# ==========================================
-# 🔍 STICKY SEARCH BAR & SUMMARY HEADER
-# ==========================================
-st.markdown("""
-<style>
     div:has(> #sticky-search) {
         position: -webkit-sticky;
         position: sticky;
@@ -514,39 +139,322 @@ st.markdown("""
         box-shadow: 0px 4px 8px rgba(0,0,0,0.08);
         margin-bottom: 15px;
     }
+    
+    button[data-baseweb="tab"] {border: 2px solid #e0e0e0 !important; border-radius: 8px !important; padding: 10px 16px !important; margin: 5px !important; background-color: #f8f9fa !important; min-width: 140px !important; font-weight: bold !important; font-size: 15px !important;}
+    button[data-baseweb="tab"][aria-selected="true"] {background-color: #1F4E79 !important; color: white !important; border-color: #1F4E79 !important;}
+    div[data-testid="stTabs"] div[role="tablist"] {display: flex !important; flex-wrap: wrap !important; overflow-x: hidden !important;}
+    @media print { section[data-testid="stSidebar"], header[data-testid="stHeader"], .stButton, .stDownloadButton { display: none !important; } }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div id="sticky-search"></div>', unsafe_allow_html=True)
-with st.container():
-    c_s1, c_s2 = st.columns([3, 1])
-    with c_s1:
-        hdr_title = f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')} vs LY)" if compare_mode else f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')})"
-        st.markdown(hdr_title)
-    with c_s2:
-        search_cust = st.text_input("🔍 Search Customer Name:", placeholder="Type to filter...").strip().upper()
+def format_indian_num(val, is_currency=False, prefix="₹"):
+    if not isinstance(val, (int, float, np.number)) or pd.isna(val): return str(val)
+    is_negative = val < 0
+    val = abs(val)
+    s = f"{val:.0f}"
+    if len(s) <= 3: res = s
+    else:
+        res = s[-3:]
+        remaining = s[:-3]
+        while remaining:
+            res = remaining[-2:] + "," + res
+            remaining = remaining[:-2]
+    if is_negative: res = "-" + res
+    return f"{prefix}{res}" if is_currency else res
 
-# Application of Filters
+def calc_growth(base, comp):
+    if base == 0: return 0.0 if comp == 0 else np.inf if comp > 0 else np.nan
+    return (comp - base) / base * 100
+
+def calc_growth_series(base_s, comp_s):
+    base_s, comp_s = base_s.astype(float), comp_s.astype(float)
+    with np.errstate(divide='ignore', invalid='ignore'): result = (comp_s - base_s) / base_s.replace(0, np.nan) * 100
+    zero_base = base_s == 0
+    result = result.mask(zero_base & (comp_s == 0), 0.0)
+    result = result.mask(zero_base & (comp_s > 0), np.inf)
+    return result
+
+def format_cell(x, col_name):
+    if not isinstance(x, (int, float, np.number)): return x
+    if "Gr(%)" in col_name:
+        if x == np.inf: return "🆕 New"
+        if pd.isna(x): return "N/A"
+        return f"📈 🟢 {x:.0f}%" if x > 0 else f"📉 🔴 {abs(x):.0f}%" if x < 0 else "➖ 0%"
+    if pd.isna(x): return "N/A"
+    if "SALE" in col_name.upper() or ("LEDGER" in col_name.upper() and "QTY" not in col_name.upper()): return format_indian_num(x, is_currency=True)
+    return format_indian_num(x, is_currency=False)
+
+def make_fy_html(val_str, gr_val, label, is_disc=False):
+    if pd.isna(gr_val): gr_html = ""
+    else:
+        fc = "#28a745" if (gr_val <= 0 if is_disc else gr_val >= 0) else "#dc3545"
+        gr_html = f" (<span style='color: {fc}; font-weight:bold;'>{gr_val:+.1f}%</span>)"
+    return f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'><b>{label}:</b> {val_str}{gr_html}</div>"
+
+wrapper = "<div style='margin-top: -15px;'>{}</div>"
+
+# 🚀 MEMORY LOCK CACHE
+@st.cache_data
+def load_data(file_name):
+    if file_name == "Combined (All Files)":
+        files_to_load = [f for f in os.listdir() if f.endswith('.xlsx') and not f.startswith('~') and not f.startswith('backup_')]
+        df_list = []
+        for f in files_to_load:
+            try: df_list.append(pd.read_excel(f, engine='openpyxl'))
+            except: pass
+        if not df_list: st.error("❌ No valid Excel files found."); st.stop()
+        df = pd.concat(df_list, ignore_index=True)
+    else:
+        try: df = pd.read_excel(file_name, engine='openpyxl')
+        except FileNotFoundError: st.error(f"⚠️ {file_name} nahi mili."); st.stop()
+        
+    df.columns = df.columns.str.strip().str.upper()
+    df['SALEVAL'] = pd.to_numeric(df['SALEVAL'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+    df['QTY'] = pd.to_numeric(df['QTY'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+    
+    disc_like_cols = [c for c in df.columns if any(k in c for k in ['DISC', 'DISCOUNT'])]
+    for dc in disc_like_cols: df[dc] = pd.to_numeric(df[dc].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+
+    df['BILLDATE'] = pd.to_datetime(df['BILLDATE'], errors='coerce').fillna(pd.to_datetime('2000-01-01'))
+    df['MONTH_NAME'] = df['BILLDATE'].dt.strftime('%B')
+    if 'YEAR2' in df.columns: df['YEAR2'] = df['YEAR2'].astype(str)
+    
+    text_cols = ['FORMAL/CASUAL', 'EOSS/FRESH', 'SEASON', 'FIT', 'CATEGORY', 'MANAGER', 'STATE', 'STATUS', 'CUSTOMERNAMEACTIVE']
+    for col in text_cols:
+        if col in df.columns:
+            df[col] = df[col].astype(str).replace(r'[\xa0\t\n\r]', ' ', regex=True).str.replace(r'\s+', ' ', regex=True).str.strip().str.upper()
+            
+    if 'CUSTOMERNAMEACTIVE' in df.columns:
+        current_time = datetime.now()
+        mask_anomaly = (df['CUSTOMERNAMEACTIVE'].str.contains('MOM', na=False)) & ((df['BILLDATE'].dt.year > current_time.year) | ((df['BILLDATE'].dt.year == current_time.year) & (df['BILLDATE'].dt.month > current_time.month)))
+        df.loc[mask_anomaly, 'SALEVAL'] = 0
+        df.loc[mask_anomaly, 'QTY'] = 0
+        for dc in disc_like_cols: df.loc[mask_anomaly, dc] = 0
+
+    # 🚫 CATEGORY EXCLUSION LOGIC
+    exclude_items = ["ARROW-MENS WESTERN-COMBO SET", "DUFFEL TROLLEY BAG", "DUFFLE BAG", "LAPTOP BACKPACK", "TROLLEY BAG", "BAGS DUFFLE BAG", "BAGS", "SUITCOVERS", "BAG-LEATHERS"]
+    if 'CATEGORY' in df.columns: df = df[~df['CATEGORY'].isin(exclude_items)]
+    
+    # 🩹 ARROW FIX
+    for col in df.columns:
+        if df[col].dtype == 'object': df[col] = df[col].astype(str)
+            
+    return df
+
+def style_dataframe(df):
+    sale_props, growth_props = {'background-color': '#d4edda', 'border': '1px solid #28a745'}, {'background-color': '#ebf7ed', 'border': '1px solid #a9d08e'}
+    styler = df.style.hide(axis="index")
+    for col in df.columns:
+        if 'GR(%)' in col.upper(): styler = styler.set_properties(**growth_props, subset=[col])
+        elif 'SALE' in col.upper() or ('LEDGER' in col.upper() and 'QTY' not in col.upper()): styler = styler.set_properties(**sale_props, subset=[col])
+    return styler
+
+def clean_df_for_single_mode(df, b_y):
+    return df[[c for c in df.columns if not (b_y in str(c) or 'Gr(%)' in str(c) or 'GR(%)' in str(c) or 'LY ' in str(c) or str(c).startswith('LY_'))]]
+
+# ==========================================
+# 🏢 4. SIDEBAR (GREETING, SUGGESTION & FILES)
+# ==========================================
+current_hour = datetime.now().hour
+if current_hour < 12: greeting = "Good Morning ☀️"
+elif current_hour < 18: greeting = "Good Afternoon 🌤️"
+else: greeting = "Good Evening 🌙"
+
+st.sidebar.markdown(f"### {greeting}")
+st.sidebar.markdown(f"**👤 User:** `{st.session_state.selected_user}`")
+st.sidebar.info(f"**🔒 Role:** `{st.session_state.user_role}` Data Access")
+
+if st.sidebar.button("🚪 Logout App", use_container_width=True, type="primary"):
+    st.session_state.password_correct = False
+    st.session_state.user_role = None
+    st.session_state.selected_user = None
+    st.rerun()
+
+st.sidebar.markdown("---")
+# 💡 SUGGESTION BOX LOGIC
+with st.sidebar.expander("💡 Give Suggestion / Feedback", expanded=False):
+    sug_text = st.text_area("Write your suggestion here:", placeholder="Kya improve kar sakte hain?")
+    if st.button("Submit Suggestion"):
+        if sug_text.strip():
+            save_suggestion(st.session_state.selected_user, sug_text)
+            st.success("✅ Submitted to Admin!")
+        else: st.warning("Khali suggestion nahi bhej sakte.")
+    
+    user_sugs = get_suggestions_db()
+    my_sugs = user_sugs[user_sugs["Username"] == st.session_state.selected_user].tail(3)
+    if not my_sugs.empty:
+        st.markdown("**Your Recent Suggestions:**")
+        for _, s_row in my_sugs.iterrows():
+            st.caption(f"📅 {s_row['Date']}")
+            st.markdown(f"**You:** {s_row['Suggestion']}")
+            if str(s_row['Admin_Reply']).strip():
+                st.markdown(f"<div style='color: #1F4E79; font-size:13px; font-style:italic;'><b>Admin Reply:</b> {s_row['Admin_Reply']}</div>", unsafe_allow_html=True)
+            st.divider()
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🏢 Brand / Data Source")
+
+# 🔒 ROLE BASED FILE FILTERING
+all_excel_files = [f for f in os.listdir() if f.endswith('.xlsx') and not f.startswith('~') and not f.startswith('backup_')]
+if not all_excel_files: st.sidebar.error("⚠️ Koi Excel (.xlsx) file nahi mili!"); st.stop()
+
+if st.session_state.user_role == "FM":
+    file_options = [f for f in all_excel_files if "FM" in f.upper()]
+elif st.session_state.user_role == "AR":
+    file_options = [f for f in all_excel_files if "AR" in f.upper()]
+else:
+    file_options = ["Combined (All Files)"] + all_excel_files
+
+if not file_options:
+    st.sidebar.error("⚠️ Aapke role ke hisaab se koi file nahi mili.")
+    st.stop()
+
+if check_feature_access("File Selector"): selected_file = st.sidebar.selectbox("Select Excel File:", file_options)
+else: selected_file = file_options[0]; st.sidebar.info(f"Fixed View: {selected_file}")
+
+if "cached_data" not in st.session_state or st.session_state.get("cached_file") != selected_file:
+    with st.spinner("🚀 Loading Data into Fast Cache..."):
+        st.session_state.cached_data = load_data(selected_file)
+        st.session_state.cached_file = selected_file
+sheet_data = st.session_state.cached_data
+
+if check_feature_access("Reload Data Button"):
+    if st.sidebar.button("🔄 Force Reload Cache", use_container_width=True):
+        st.cache_data.clear()
+        st.session_state.cached_data = load_data(selected_file)
+        st.rerun()
+
+if check_feature_access("File Upload Feature"):
+    st.sidebar.markdown("---")
+    if selected_file == "Combined (All Files)": st.sidebar.warning("⚠️ File upload karne ke liye kripya specific file select karein.")
+    else:
+        st.sidebar.markdown(f"### 📤 Add New Sales to: {selected_file}")
+        backup_file = f"backup_{selected_file}"
+        uploaded_file = st.sidebar.file_uploader("Upload New Month Sales (.xlsx)", type=['xlsx'])
+        if uploaded_file is not None:
+            if st.sidebar.button("Merge & Update Data 🚀", use_container_width=True):
+                try:
+                    shutil.copyfile(selected_file, backup_file)
+                    df_existing = pd.read_excel(selected_file, engine='openpyxl')
+                    df_new = pd.read_excel(uploaded_file, engine='openpyxl')
+                    df_combined = pd.concat([df_existing, df_new], ignore_index=True).drop_duplicates()
+                    df_combined.to_excel(selected_file, index=False, engine='openpyxl')
+                    st.cache_data.clear()
+                    st.session_state.cached_data = load_data(selected_file)
+                    st.sidebar.success(f"✅ Nayi sale successfully add ho gayi!")
+                    st.rerun()
+                except Exception as e: st.sidebar.error(f"❌ Error aaya: {e}")
+
+        if os.path.exists(backup_file):
+            st.sidebar.warning("⚠️ Kya aapse galat file update ho gayi thi?")
+            if st.sidebar.button("Undo Last Upload ↩️", use_container_width=True):
+                shutil.copyfile(backup_file, selected_file)
+                os.remove(backup_file)
+                st.cache_data.clear()
+                st.session_state.cached_data = load_data(selected_file)
+                st.rerun()
+
+# ==========================================
+# 🔍 5. SIDEBAR FILTERS FORM
+# ==========================================
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🎯 Global Filters")
+
+with st.sidebar.form(key='global_filter_form'):
+    if check_feature_access("Compare LY Toggle"): compare_mode = st.checkbox("🔄 Enable Comparison (LY)", value=True)
+    else: compare_mode = False
+    
+    if check_feature_access("Quick Range Preset"): shortcut = st.selectbox("Select Preset:", ["None (Custom)", "This Month", "Last Month", "Year-to-Date (YTD)"])
+    else: shortcut = "None (Custom)"
+
+    st.markdown("**1. Selected Period (Target/TY)**")
+    col_d1, col_d2 = st.columns(2)
+    if shortcut == "This Month": def_ty_start, def_ty_end = today.replace(day=1), today
+    elif shortcut == "Last Month": def_ty_end, def_ty_start = today.replace(day=1) - timedelta(days=1), (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+    elif shortcut == "Year-to-Date (YTD)": def_ty_start, def_ty_end = datetime(today.year if today.month >= 4 else today.year - 1, 4, 1), today
+    else: def_ty_start, def_ty_end = datetime(today.year, today.month, 1), today
+
+    ty_start = col_d1.date_input("Start Date (TY)", def_ty_start)
+    ty_end = col_d2.date_input("End Date (TY)", def_ty_end)
+    
+    if compare_mode:
+        st.markdown("**2. Base Period (Last Year/LY)**")
+        col_d3, col_d4 = st.columns(2)
+        try: ly_start_default = ty_start.replace(year=ty_start.year - 1)
+        except ValueError: ly_start_default = ty_start.replace(year=ty_start.year - 1, day=28)
+        try: ly_end_default = ty_end.replace(year=ty_end.year - 1)
+        except ValueError: ly_end_default = ty_end.replace(year=ty_end.year - 1, day=28)
+        ly_start = col_d3.date_input("Start Date (LY)", ly_start_default)
+        ly_end = col_d4.date_input("End Date (LY)", ly_end_default)
+    else: ly_start, ly_end = ty_start, ty_end
+
+    st.markdown("---")
+    all_columns = list(sheet_data.columns)
+    guess_idx = next((i for i, c in enumerate(all_columns) if any(k in c for k in ['BILLNO', 'INVOICENO', 'BILL_NO', 'INVOICE_NO']) and c not in ['BILLDATE', 'MONTH_NAME', 'YEAR2']), 0)
+    selected_bill_col = st.selectbox("🧾 Select Bill/Invoice Column:", all_columns, index=guess_idx)
+    
+    st.markdown("---")
+    possible_disc_cols = [c for c in all_columns if any(k in c for k in ['DISC', 'DISCOUNT'])]
+    guess_disc = next((i for i, c in enumerate(possible_disc_cols) if c in ['DISCOUNT', 'DISC'] or 'VALUE' in c), 0) if possible_disc_cols else 0
+    selected_disc_col = st.selectbox("🏷️ Select Discount Column:", possible_disc_cols, index=guess_disc) if possible_disc_cols else None
+    
+    st.markdown("---")
+    filter_cols = ['MONTH_NAME', 'MANAGER', 'CATEGORY', 'FIT', 'SEASON', 'STATE', 'STATUS', 'EOSS/FRESH', 'FORMAL/CASUAL']
+    selected_filters = {}
+    for col in filter_cols:
+        if col in sheet_data.columns:
+            unique_vals = sorted([str(x) for x in sheet_data[col].dropna().unique()])
+            selected_filters[col] = st.multiselect(f"Filter by {col.replace('_', ' ').title()}:", unique_vals, default=None)
+            
+    submit_button = st.form_submit_button(label='Apply Filters 🚀', use_container_width=True)
+
+# DATE VARIABLES
+ty_start_dt = pd.to_datetime(ty_start)
+ty_end_dt = pd.to_datetime(ty_end)
+ly_start_dt = pd.to_datetime(ly_start)
+ly_end_dt = pd.to_datetime(ly_end)
+comp_y = str(ty_start.year)
+base_y = str(ly_start.year) if compare_mode else "N/A_LY"
+if comp_y == base_y and compare_mode:
+    comp_y = comp_y + " (TY)"
+    base_y = base_y + " (LY)"
+
+if check_feature_access("PDF Export Button"):
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📄 Export to PDF")
+    if st.sidebar.button("🖨️ Save Dashboard as PDF", use_container_width=True, type="primary"):
+        st.components.v1.html("<script>window.parent.print();</script>", height=0)
+# ==========================================
+# ⚙️ 6. DATA FILTERING & STICKY YELLOW SEARCH BOX
+# ==========================================
 filtered_df = sheet_data.copy()
-
-if search_cust:
-    filtered_df = filtered_df[filtered_df['CUSTOMERNAMEACTIVE'].astype(str).str.contains(search_cust, case=False, na=False)]
 
 for col, selected_vals in selected_filters.items():
     if len(selected_vals) > 0:
         filtered_df = filtered_df[filtered_df[col].astype(str).isin(selected_vals)]
 
+# Hidden anchor for Sticky Summary & Search Box
+st.markdown('<div id="sticky-anchor"></div>', unsafe_allow_html=True)
+with st.container():
+    # 📌 The "Yellow Box" Search is placed here next to the Title
+    c_s1, c_s2 = st.columns([3, 1])
+    with c_s1:
+        hdr_title = f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')} vs LY)" if compare_mode else f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')})"
+        st.markdown(hdr_title)
+    with c_s2:
+        search_cust = st.text_input("🔍 Search Customer Name:", placeholder="Type to filter...", label_visibility="collapsed").strip().upper()
+
+# Application of Filters for Search Box
+if search_cust:
+    filtered_df = filtered_df[filtered_df['CUSTOMERNAMEACTIVE'].astype(str).str.contains(search_cust, case=False, na=False)]
+
 # 🆕 EXCEL-STYLE SLICER & PREMIUM BLUE TAGS DISPLAY
 if search_cust:
     matched_parties = sorted(filtered_df['CUSTOMERNAMEACTIVE'].dropna().unique().tolist())
-    
     if matched_parties:
         with st.expander("🎛️ Click Here to Filter Specific Stores (Excel-Style Slicer)", expanded=False):
-            selected_parties = st.multiselect(
-                "Remove stores by clicking 'x' or select specific ones:",
-                options=matched_parties,
-                default=matched_parties
-            )
+            selected_parties = st.multiselect("Remove stores by clicking 'x' or select specific ones:", options=matched_parties, default=matched_parties)
+        
         if selected_parties:
             filtered_df = filtered_df[filtered_df['CUSTOMERNAMEACTIVE'].isin(selected_parties)]
         else:
@@ -555,329 +463,231 @@ if search_cust:
         if selected_parties:
             num_stores = len(selected_parties)
             tags_html = "".join([f"<span style='background-color: #e3f2fd; color: #1565c0; padding: 5px 12px; border-radius: 15px; font-size: 13px; font-weight: 500; border: 1px solid #90caf9; display: inline-block; margin: 3px;'>{party}</span>" for party in selected_parties])
-            
-            st.markdown(f"""
-            <div style='background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
-                <div style='font-size: 16px; font-weight: bold; color: #1F4E79; margin-bottom: 12px; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px;'>
-                    🏬 Viewing Data For: "{search_cust}" 
-                    <span style='background-color: #ffebee; color: #c62828; padding: 3px 8px; border-radius: 10px; font-size: 12px; margin-left: 8px;'>{num_stores} Stores Selected</span>
-                </div>
-                <div style='display: flex; flex-wrap: wrap; gap: 4px;'>
-                    {tags_html}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"<div style='background-color: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 20px;'><b>🏬 Viewing Data For: \"{search_cust}\"</b> <span style='background-color: #ffebee; color: #c62828; padding: 3px 8px; border-radius: 10px; font-size: 12px;'>{num_stores} Stores Selected</span><br><br>{tags_html}</div>", unsafe_allow_html=True)
     else:
-        st.markdown(f"<div style='font-size: 16px; font-weight: bold; color: #c62828; background-color: #ffebee; padding: 12px; border-radius: 8px; border: 1px solid #ef9a9a; margin-bottom: 20px;'>🏬 No Party Found Matching: \"{search_cust}\"</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='color: #c62828; background-color: #ffebee; padding: 12px; border-radius: 8px; border: 1px solid #ef9a9a; margin-bottom: 20px;'>🏬 No Party Found Matching: \"{search_cust}\"</div>", unsafe_allow_html=True)
 
-# Generate Unique Bill IDs (Smart Logic: Customer + Bill Date + Bill No)
 if selected_bill_col in filtered_df.columns and 'CUSTOMERNAMEACTIVE' in filtered_df.columns:
-    filtered_df['UNIQUE_BILL_ID'] = (
-        filtered_df['CUSTOMERNAMEACTIVE'].astype(str).str.strip() + "_" + 
-        filtered_df['BILLDATE'].dt.strftime('%Y-%m-%d') + "_" + 
-        filtered_df[selected_bill_col].astype(str).str.strip()
-    )
+    filtered_df['UNIQUE_BILL_ID'] = filtered_df['CUSTOMERNAMEACTIVE'].astype(str).str.strip() + "_" + filtered_df['BILLDATE'].dt.strftime('%Y-%m-%d') + "_" + filtered_df[selected_bill_col].astype(str).str.strip()
 else:
     filtered_df['UNIQUE_BILL_ID'] = filtered_df['BILLDATE'].astype(str)
 
-# Global FY Year Definition
 filtered_df['FY_YEAR'] = np.where(filtered_df['BILLDATE'].dt.month < 4, filtered_df['BILLDATE'].dt.year - 1, filtered_df['BILLDATE'].dt.year)
 
-# 🔄 DYNAMIC DATE FILTERING LOGIC
 df_comp_kpi = filtered_df[(filtered_df['BILLDATE'] >= ty_start_dt) & (filtered_df['BILLDATE'] <= ty_end_dt)].copy()
+df_base_kpi = filtered_df[(filtered_df['BILLDATE'] >= ly_start_dt) & (filtered_df['BILLDATE'] <= ly_end_dt)].copy() if compare_mode else pd.DataFrame(columns=filtered_df.columns)
+df_comp_kpi['YEAR2'], df_base_kpi['YEAR2'] = comp_y, base_y
 
-if compare_mode:
-    df_base_kpi = filtered_df[(filtered_df['BILLDATE'] >= ly_start_dt) & (filtered_df['BILLDATE'] <= ly_end_dt)].copy()
-else:
-    df_base_kpi = pd.DataFrame(columns=filtered_df.columns)
-
-df_comp_kpi['YEAR2'] = comp_y
-df_base_kpi['YEAR2'] = base_y
-
-# Dynamic Year-to-Date isolation ranges
-df_ytd_comp = df_comp_kpi.copy()
-df_ytd_base = df_base_kpi.copy()
+df_ytd_comp, df_ytd_base = df_comp_kpi.copy(), df_base_kpi.copy()
 df_ytd_global = pd.concat([df_ytd_comp, df_ytd_base])
 
-s_comp_ytd_g, s_base_ytd_g = df_ytd_comp['SALEVAL'].sum(), df_ytd_base['SALEVAL'].sum()
-q_comp_ytd_g, q_base_ytd_g = df_ytd_comp['QTY'].sum(), df_ytd_base['QTY'].sum()
-b_comp_ytd_g, b_base_ytd_g = df_ytd_comp['UNIQUE_BILL_ID'].nunique() if 'UNIQUE_BILL_ID' in df_ytd_comp.columns else 0, df_ytd_base['UNIQUE_BILL_ID'].nunique() if 'UNIQUE_BILL_ID' in df_ytd_base.columns else 0
-d_comp_ytd_g, d_base_ytd_g = df_ytd_comp['CUSTOMERNAMEACTIVE'].nunique() if 'CUSTOMERNAMEACTIVE' in df_ytd_comp.columns else 0, df_ytd_base['CUSTOMERNAMEACTIVE'].nunique() if 'CUSTOMERNAMEACTIVE' in df_ytd_base.columns else 0
+s_comp, s_base = df_ytd_comp['SALEVAL'].sum(), df_ytd_base['SALEVAL'].sum()
+q_comp, q_base = df_ytd_comp['QTY'].sum(), df_ytd_base['QTY'].sum()
+b_comp = df_ytd_comp['UNIQUE_BILL_ID'].nunique() if 'UNIQUE_BILL_ID' in df_ytd_comp.columns else 0
+b_base = df_ytd_base['UNIQUE_BILL_ID'].nunique() if 'UNIQUE_BILL_ID' in df_ytd_base.columns else 0
+d_comp = df_ytd_comp['CUSTOMERNAMEACTIVE'].nunique() if 'CUSTOMERNAMEACTIVE' in df_ytd_comp.columns else 0
+d_base = df_ytd_base['CUSTOMERNAMEACTIVE'].nunique() if 'CUSTOMERNAMEACTIVE' in df_ytd_base.columns else 0
 
-# ==========================================
-# 🌟 GLOBAL PERFORMANCE AREA (STICKY FREEZE PANE)
-# ==========================================
-st.markdown('<div id="sticky-summary-anchor"></div>', unsafe_allow_html=True)
+abv_comp, abv_base = (s_comp/b_comp if b_comp>0 else 0), (s_base/b_base if b_base>0 else 0)
+aqv_comp, aqv_base = (s_comp/q_comp if q_comp>0 else 0), (s_base/q_base if q_base>0 else 0)
+upt_comp, upt_base = (q_comp/b_comp if b_comp>0 else 0), (q_base/b_base if b_base>0 else 0)
 
-with st.container():
-   # 🔍 STICKY SEARCH BAR & TITLE (Yellow Box)
-    c_s1, c_s2 = st.columns([3, 1])
-    with c_s1:
-        hdr_title = f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')} vs LY)" if compare_mode else f"### 🌟 Global Performance Summary ({ty_start.strftime('%d-%b-%y')} to {ty_end.strftime('%d-%b-%y')})"
-        st.markdown(hdr_title)
-    with c_s2:
-        search_cust = st.text_input("🔍 Search Customer Name:", placeholder="Type to filter...", label_visibility="collapsed").strip().upper()
-
-    # Apply Search Filter dynamically
-    if search_cust:
-        df_comp_kpi = df_comp_kpi[df_comp_kpi['CUSTOMERNAMEACTIVE'].astype(str).str.contains(search_cust, case=False, na=False)]
-        df_base_kpi = df_base_kpi[df_base_kpi['CUSTOMERNAMEACTIVE'].astype(str).str.contains(search_cust, case=False, na=False)]
-        df_ytd_global = df_ytd_global[df_ytd_global['CUSTOMERNAMEACTIVE'].astype(str).str.contains(search_cust, case=False, na=False)]
-        filtered_df = filtered_df[filtered_df['CUSTOMERNAMEACTIVE'].astype(str).str.contains(search_cust, case=False, na=False)]
-
-    df_comp_perf = df_comp_kpi.copy()
-    df_base_perf = df_base_kpi.copy()
-
-    s_comp = df_comp_perf['SALEVAL'].sum()
-    s_base = df_base_perf['SALEVAL'].sum()
-    q_comp = df_comp_perf['QTY'].sum()
-    q_base = df_base_perf['QTY'].sum()
-    d_comp = df_comp_perf['CUSTOMERNAMEACTIVE'].nunique() if 'CUSTOMERNAMEACTIVE' in df_comp_perf.columns else 0
-    d_base = df_base_perf['CUSTOMERNAMEACTIVE'].nunique() if 'CUSTOMERNAMEACTIVE' in df_base_perf.columns else 0
-    b_comp = df_comp_perf['UNIQUE_BILL_ID'].nunique() if 'UNIQUE_BILL_ID' in df_comp_perf.columns else 0
-    b_base = df_base_perf['UNIQUE_BILL_ID'].nunique() if 'UNIQUE_BILL_ID' in df_base_perf.columns else 0
-
-    abv_comp = s_comp / b_comp if b_comp > 0 else 0
-    abv_base = s_base / b_base if b_base > 0 else 0
-    aqv_comp = s_comp / q_comp if q_comp > 0 else 0
-    aqv_base = s_base / q_base if q_base > 0 else 0
-    upt_comp = q_comp / b_comp if b_comp > 0 else 0
-    upt_base = q_base / b_base if b_base > 0 else 0
-
-    if selected_disc_col:
-        disc_g_c = abs(df_comp_perf[selected_disc_col].sum())
-        disc_g_b = abs(df_base_perf[selected_disc_col].sum()) if compare_mode else 0
-    else:
-        disc_g_c, disc_g_b = 0, 0
+if selected_disc_col:
+    disc_g_c = abs(df_ytd_comp[selected_disc_col].sum())
+    disc_g_b = abs(df_ytd_base[selected_disc_col].sum()) if compare_mode else 0
+else:
+    disc_g_c, disc_g_b = 0, 0
         
-    gross_g_c = abs(s_comp) + disc_g_c
-    gross_g_b = abs(s_base) + disc_g_b
+gross_g_c, gross_g_b = abs(s_comp) + disc_g_c, abs(s_base) + disc_g_b
+disc_pct_g_c = (disc_g_c / gross_g_c * 100) if gross_g_c > 0 else 0
+disc_pct_g_b = (disc_g_b / gross_g_b * 100) if gross_g_b > 0 else 0
 
-    disc_pct_g_c = (disc_g_c / gross_g_c * 100) if gross_g_c > 0 else 0
-    disc_pct_g_b = (disc_g_b / gross_g_b * 100) if gross_g_b > 0 else 0
+temp_fy_all = filtered_df.copy()
+agg_funcs = {'SALEVAL': 'sum', 'QTY': 'sum'}
+if 'UNIQUE_BILL_ID' in temp_fy_all.columns: agg_funcs['UNIQUE_BILL_ID'] = 'nunique'
+if 'CUSTOMERNAMEACTIVE' in temp_fy_all.columns: agg_funcs['CUSTOMERNAMEACTIVE'] = 'nunique'
 
-    # 🔥 FULL FY HISTORY CALCULATION LOGIC 
-    temp_fy_all = filtered_df.copy()
+fy_hist = temp_fy_all.groupby('FY_YEAR').agg(agg_funcs).sort_index(ascending=False)
+fy_hist.rename(columns={'UNIQUE_BILL_ID': 'BILLS', 'CUSTOMERNAMEACTIVE': 'DOORS'}, inplace=True)
 
-    agg_funcs = {'SALEVAL': 'sum', 'QTY': 'sum'}
-    if 'UNIQUE_BILL_ID' in temp_fy_all.columns:
-        agg_funcs['UNIQUE_BILL_ID'] = 'nunique'
-    if 'CUSTOMERNAMEACTIVE' in temp_fy_all.columns:
-        agg_funcs['CUSTOMERNAMEACTIVE'] = 'nunique'
-        
-    fy_hist = temp_fy_all.groupby('FY_YEAR').agg(agg_funcs).sort_index(ascending=False)
-    fy_hist.rename(columns={'UNIQUE_BILL_ID': 'BILLS', 'CUSTOMERNAMEACTIVE': 'DOORS'}, inplace=True)
+if 'BILLS' not in fy_hist.columns: fy_hist['BILLS'] = 0
+if 'DOORS' not in fy_hist.columns: fy_hist['DOORS'] = 0
+if selected_disc_col: fy_hist['DISC'] = temp_fy_all.groupby('FY_YEAR')[selected_disc_col].apply(lambda x: abs(x.sum()))
+else: fy_hist['DISC'] = 0
 
-    if 'BILLS' not in fy_hist.columns: fy_hist['BILLS'] = 0
-    if 'DOORS' not in fy_hist.columns: fy_hist['DOORS'] = 0
+fy_hist['SALE_LY'] = fy_hist['SALEVAL'].shift(-1)
+fy_hist['QTY_LY'] = fy_hist['QTY'].shift(-1)
+fy_hist['BILLS_LY'] = fy_hist['BILLS'].shift(-1)
+fy_hist['DOORS_LY'] = fy_hist['DOORS'].shift(-1)
 
-    if selected_disc_col:
-        fy_hist['DISC'] = temp_fy_all.groupby('FY_YEAR')[selected_disc_col].apply(lambda x: abs(x.sum()))
-    else:
-        fy_hist['DISC'] = 0
+fy_hist['Sale Gr(%)'] = calc_growth_series(fy_hist['SALE_LY'], fy_hist['SALEVAL'])
+fy_hist['Qty Gr(%)'] = calc_growth_series(fy_hist['QTY_LY'], fy_hist['QTY'])
+fy_hist['Bills Gr(%)'] = calc_growth_series(fy_hist['BILLS_LY'], fy_hist['BILLS'])
+fy_hist['Doors Gr(%)'] = calc_growth_series(fy_hist['DOORS_LY'], fy_hist['DOORS'])
 
-    fy_hist['SALE_LY'] = fy_hist['SALEVAL'].shift(-1)
-    fy_hist['QTY_LY'] = fy_hist['QTY'].shift(-1)
-    fy_hist['BILLS_LY'] = fy_hist['BILLS'].shift(-1)
-    fy_hist['DOORS_LY'] = fy_hist['DOORS'].shift(-1)
+fy_hist['Avg Bill Value'] = fy_hist['SALEVAL'] / fy_hist['BILLS'].replace(0, np.nan)
+fy_hist['Avg Bill Value LY'] = fy_hist['SALE_LY'] / fy_hist['BILLS_LY'].replace(0, np.nan)
+fy_hist['ABV Gr(%)'] = calc_growth_series(fy_hist['Avg Bill Value LY'], fy_hist['Avg Bill Value'])
 
-    fy_hist['Sale Gr(%)'] = calc_growth_series(fy_hist['SALE_LY'], fy_hist['SALEVAL'])
-    fy_hist['Qty Gr(%)'] = calc_growth_series(fy_hist['QTY_LY'], fy_hist['QTY'])
-    fy_hist['Bills Gr(%)'] = calc_growth_series(fy_hist['BILLS_LY'], fy_hist['BILLS'])
-    fy_hist['Doors Gr(%)'] = calc_growth_series(fy_hist['DOORS_LY'], fy_hist['DOORS'])
+fy_hist['Avg Qty Value'] = fy_hist['SALEVAL'] / fy_hist['QTY'].replace(0, np.nan)
+fy_hist['Avg Qty Value LY'] = fy_hist['SALE_LY'] / fy_hist['QTY_LY'].replace(0, np.nan)
+fy_hist['AQV Gr(%)'] = calc_growth_series(fy_hist['Avg Qty Value LY'], fy_hist['Avg Qty Value'])
 
-    fy_hist['Avg Bill Value'] = fy_hist['SALEVAL'] / fy_hist['BILLS'].replace(0, np.nan)
-    fy_hist['Avg Bill Value LY'] = fy_hist['SALE_LY'] / fy_hist['BILLS_LY'].replace(0, np.nan)
-    fy_hist['ABV Gr(%)'] = calc_growth_series(fy_hist['Avg Bill Value LY'], fy_hist['Avg Bill Value'])
+fy_hist['UPT'] = fy_hist['QTY'] / fy_hist['BILLS'].replace(0, np.nan)
+fy_hist['UPT LY'] = fy_hist['QTY_LY'] / fy_hist['BILLS_LY'].replace(0, np.nan)
+fy_hist['UPT Gr(%)'] = calc_growth_series(fy_hist['UPT LY'], fy_hist['UPT'])
 
-    fy_hist['Avg Qty Value'] = fy_hist['SALEVAL'] / fy_hist['QTY'].replace(0, np.nan)
-    fy_hist['Avg Qty Value LY'] = fy_hist['SALE_LY'] / fy_hist['QTY_LY'].replace(0, np.nan)
-    fy_hist['AQV Gr(%)'] = calc_growth_series(fy_hist['Avg Qty Value LY'], fy_hist['Avg Qty Value'])
+fy_hist['Gross'] = fy_hist['SALEVAL'].abs() + fy_hist['DISC']
+fy_hist['Discount %'] = (fy_hist['DISC'] / fy_hist['Gross'] * 100).fillna(0)
+fy_hist['Discount % LY'] = fy_hist['Discount %'].shift(-1)
+fy_hist['Disc Gr(%)'] = fy_hist['Discount %'] - fy_hist['Discount % LY']
 
-    fy_hist['UPT'] = fy_hist['QTY'] / fy_hist['BILLS'].replace(0, np.nan)
-    fy_hist['UPT LY'] = fy_hist['QTY_LY'] / fy_hist['BILLS_LY'].replace(0, np.nan)
-    fy_hist['UPT Gr(%)'] = calc_growth_series(fy_hist['UPT LY'], fy_hist['UPT'])
+sale_html, qty_html, bills_html, doors_html, disc_html, abv_html, aqv_html, upt_html = "", "", "", "", "", "", "", ""
 
-    fy_hist['Gross'] = fy_hist['SALEVAL'].abs() + fy_hist['DISC']
-    fy_hist['Discount %'] = (fy_hist['DISC'] / fy_hist['Gross'] * 100).fillna(0)
-    fy_hist['Discount % LY'] = fy_hist['Discount %'].shift(-1)
-    fy_hist['Disc Gr(%)'] = fy_hist['Discount %'] - fy_hist['Discount % LY']
+# Restored HTML generation for Missing Metrics
+for fy_year, row in fy_hist.iterrows():
+    fy_lbl = f"FY {str(fy_year)[-2:]}-{str(fy_year+1)[-2:]}"
+    sale_html += make_fy_html(format_indian_num(row['SALEVAL'], True), row['Sale Gr(%)'], fy_lbl)
+    qty_html += make_fy_html(format_indian_num(row['QTY'], False), row['Qty Gr(%)'], fy_lbl)
+    bills_html += make_fy_html(format_indian_num(row['BILLS'], False), row['Bills Gr(%)'], fy_lbl)
+    doors_html += make_fy_html(format_indian_num(row['DOORS'], False), row['Doors Gr(%)'], fy_lbl)
+    disc_html += make_fy_html(f"{row['Discount %']:.1f}%", row['Disc Gr(%)'], fy_lbl, is_disc=True)
+    abv_html += make_fy_html(format_indian_num(row['Avg Bill Value'], True), row['ABV Gr(%)'], fy_lbl)
+    aqv_html += make_fy_html(format_indian_num(row['Avg Qty Value'], True), row['AQV Gr(%)'], fy_lbl)
+    upt_html += make_fy_html(f"{row['UPT']:.2f}", row['UPT Gr(%)'], fy_lbl)
 
-    sale_html, qty_html, bills_html, doors_html, disc_html, abv_html, aqv_html, upt_html = "", "", "", "", "", "", "", ""
+r1_c1, r1_c2, r1_c3, r1_c4, r1_c5 = st.columns(5)
+r1_c1.metric(label="Total Sale", value=format_indian_num(s_comp, True), delta=f"{calc_growth(s_base, s_comp):.1f}% (LY: {format_indian_num(s_base, True)})" if compare_mode else None)
+if compare_mode: r1_c1.markdown(wrapper.format(sale_html), unsafe_allow_html=True)
 
-    for fy_year, row in fy_hist.iterrows():
-        fy_lbl = f"FY {str(fy_year)[-2:]}-{str(fy_year+1)[-2:]}"
-        sale_html += make_fy_html(format_indian_num(row['SALEVAL'], True), row['Sale Gr(%)'], fy_lbl)
-        qty_html += make_fy_html(format_indian_num(row['QTY'], False), row['Qty Gr(%)'], fy_lbl)
-        bills_html += make_fy_html(format_indian_num(row['BILLS'], False), row['Bills Gr(%)'], fy_lbl)
-        doors_html += make_fy_html(format_indian_num(row['DOORS'], False), row['Doors Gr(%)'], fy_lbl)
-        disc_html += make_fy_html(f"{row['Discount %']:.1f}%", row['Disc Gr(%)'], fy_lbl, is_disc=True)
-        abv_html += make_fy_html(format_indian_num(row['Avg Bill Value'], True), row['ABV Gr(%)'], fy_lbl)
-        aqv_html += make_fy_html(format_indian_num(row['Avg Qty Value'], True), row['AQV Gr(%)'], fy_lbl)
-        upt_html += make_fy_html(f"{row['UPT']:.2f}", row['UPT Gr(%)'], fy_lbl)
+r1_c2.metric(label="Total Qty", value=format_indian_num(q_comp, False), delta=f"{calc_growth(q_base, q_comp):.1f}% (LY: {format_indian_num(q_base, False)})" if compare_mode else None)
+if compare_mode: r1_c2.markdown(wrapper.format(qty_html), unsafe_allow_html=True)
 
-    r1_c1, r1_c2, r1_c3, r1_c4, r1_c5 = st.columns(5)
-    r1_c1.metric(label="Total Sale", value=format_indian_num(s_comp, True), delta=f"{calc_growth(s_base, s_comp):.1f}% (LY: {format_indian_num(s_base, True)})" if compare_mode else None)
-    if compare_mode: r1_c1.markdown(wrapper.format(sale_html), unsafe_allow_html=True)
+r1_c3.metric(label="Total No Bills", value=format_indian_num(b_comp, False), delta=f"{calc_growth(b_base, b_comp):.1f}% (LY: {format_indian_num(b_base, False)})" if compare_mode else None)
+if compare_mode: r1_c3.markdown(wrapper.format(bills_html), unsafe_allow_html=True)
 
-    r1_c2.metric(label="Total Qty", value=format_indian_num(q_comp, False), delta=f"{calc_growth(q_base, q_comp):.1f}% (LY: {format_indian_num(q_base, False)})" if compare_mode else None)
-    if compare_mode: r1_c2.markdown(wrapper.format(qty_html), unsafe_allow_html=True)
+r1_c4.metric(label="Total Active Doors", value=format_indian_num(d_comp, False), delta=f"{calc_growth(d_base, d_comp):.1f}% (LY: {format_indian_num(d_base, False)})" if compare_mode else None)
+if compare_mode: r1_c4.markdown(wrapper.format(doors_html), unsafe_allow_html=True)
 
-    r1_c3.metric(label="Total No Bills", value=format_indian_num(b_comp, False), delta=f"{calc_growth(b_base, b_comp):.1f}% (LY: {format_indian_num(b_base, False)})" if compare_mode else None)
-    if compare_mode: r1_c3.markdown(wrapper.format(bills_html), unsafe_allow_html=True)
-
-    r1_c4.metric(label="Total Active Doors", value=format_indian_num(d_comp, False), delta=f"{calc_growth(d_base, d_comp):.1f}% (LY: {format_indian_num(d_base, False)})" if compare_mode else None)
-    if compare_mode: r1_c4.markdown(wrapper.format(doors_html), unsafe_allow_html=True)
-
-    delta_disc_g_str = f"{(disc_pct_g_c - disc_pct_g_b):+.1f}% (LY: {disc_pct_g_b:.1f}%)" if compare_mode else None
-    r1_c5.metric(label="Discount %", value=f"{disc_pct_g_c:.1f}%", delta=delta_disc_g_str, delta_color="inverse")
-    if compare_mode: r1_c5.markdown(wrapper.format(disc_html), unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    days_ty = max(1, (ty_end_dt - ty_start_dt).days + 1)
-    days_ly = max(1, (ly_end_dt - ly_start_dt).days + 1) if compare_mode else 1
-    per_day_comp = s_comp / days_ty
-    per_day_base = s_base / days_ly if compare_mode else 0
-
-    months_ty = max(1, df_comp_perf['MONTH_NAME'].nunique())
-    months_ly = max(1, df_base_perf['MONTH_NAME'].nunique()) if compare_mode else 1
-    per_month_comp = s_comp / months_ty
-    per_month_base = s_base / months_ly if compare_mode else 0
-
-    per_day_qty_comp = q_comp / days_ty
-    per_day_qty_base = q_base / days_ly if compare_mode else 0
-    per_month_qty_comp = q_comp / months_ty
-    per_month_qty_base = q_base / months_ly if compare_mode else 0
-
-    pd_qty_gr = calc_growth(per_day_qty_base, per_day_qty_comp)
-    pm_qty_gr = calc_growth(per_month_qty_base, per_month_qty_comp)
-
-    exp_month_val = per_day_comp * 30
-    exp_month_qty = per_day_qty_comp * 30
-    exp_year_val = per_day_comp * 365
-    exp_year_qty = per_day_qty_comp * 365
-
-    pd_qty_str = format_indian_num(per_day_qty_comp, False)
-    pd_qty_gr_html = ""
-    if compare_mode and not pd.isna(pd_qty_gr):
-        fc = "#28a745" if pd_qty_gr >= 0 else "#dc3545"
-        pd_qty_gr_html = f" (<span style='color: {fc}; font-weight:bold;'>{pd_qty_gr:+.1f}%</span>)"
-
-    col2_html = f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'><b>Avg Qty/Day:</b> {pd_qty_str}{pd_qty_gr_html}</div>"
-    col2_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 12px; font-weight: bold;'>🎯 Exp. Month (30D):</div>"
-    col2_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'>• Value: <b style='color:#2E7D32;'>{format_indian_num(exp_month_val, True)}</b></div>"
-    col2_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'>• Qty: <b style='color:#1F4E79;'>{format_indian_num(exp_month_qty, False)}</b></div>"
-
-    pm_qty_str = format_indian_num(per_month_qty_comp, False)
-    pm_qty_gr_html = ""
-    if compare_mode and not pd.isna(pm_qty_gr):
-        fc = "#28a745" if pm_qty_gr >= 0 else "#dc3545"
-        pm_qty_gr_html = f" (<span style='color: {fc}; font-weight:bold;'>{pm_qty_gr:+.1f}%</span>)"
-
-    col3_html = f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'><b>Avg Qty/Month:</b> {pm_qty_str}{pm_qty_gr_html}</div>"
-    col3_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 12px; font-weight: bold;'>🎯 Exp. Year (365D):</div>"
-    col3_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'>• Value: <b style='color:#2E7D32;'>{format_indian_num(exp_year_val, True)}</b></div>"
-    col3_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'>• Qty: <b style='color:#1F4E79;'>{format_indian_num(exp_year_qty, False)}</b></div>"
-
-    r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns(5)
-    r2_c1.metric(label="Average Bill Value", value=format_indian_num(abv_comp, True), delta=f"{calc_growth(abv_base, abv_comp):.1f}% (LY: {format_indian_num(abv_base, True)})" if compare_mode else None)
-    if compare_mode: r2_c1.markdown(wrapper.format(abv_html), unsafe_allow_html=True)
-    r2_c2.metric(label="Per Day Avg Sale", value=format_indian_num(per_day_comp, True), delta=f"{calc_growth(per_day_base, per_day_comp):.1f}% (LY: {format_indian_num(per_day_base, True)})" if compare_mode else None)
-    r2_c2.markdown(wrapper.format(col2_html), unsafe_allow_html=True)
-    r2_c3.metric(label="Per Month Avg Sale", value=format_indian_num(per_month_comp, True), delta=f"{calc_growth(per_month_base, per_month_comp):.1f}% (LY: {format_indian_num(per_month_base, True)})" if compare_mode else None)
-    r2_c3.markdown(wrapper.format(col3_html), unsafe_allow_html=True)
-    r2_c4.metric(label="Average Qty Value", value=format_indian_num(aqv_comp, True), delta=f"{calc_growth(aqv_base, aqv_comp):.1f}% (LY: {format_indian_num(aqv_base, True)})" if compare_mode else None)
-    if compare_mode: r2_c4.markdown(wrapper.format(aqv_html), unsafe_allow_html=True)
-    r2_c5.metric(label="Unit Per Transaction", value=f"{upt_comp:.2f}", delta=f"{calc_growth(upt_base, upt_comp):.1f}% (LY: {upt_base:.2f})" if compare_mode else None)
-    if compare_mode: r2_c5.markdown(wrapper.format(upt_html), unsafe_allow_html=True)
-
-    # 🆕 COMPACT SEASON-WISE PERFORMANCE
-    if 'SEASON' in filtered_df.columns:
-        st.markdown("<br>", unsafe_allow_html=True)
-        with st.container(border=True):
-            st.markdown("<div style='font-size: 16px; font-weight: bold; color: #1F4E79; margin-bottom: 10px;'>🌤️ Compact Season-wise Summary (Calendar vs Full Data)</div>", unsafe_allow_html=True)
-            
-            season_cal = df_comp_perf.groupby('SEASON').agg({'SALEVAL': 'sum', 'QTY': 'sum'})
-            season_full = filtered_df.groupby('SEASON').agg({'SALEVAL': 'sum', 'QTY': 'sum'})
-            
-            all_seasons = pd.DataFrame({'SEASON': season_full.index})
-            
-            ss_seasons = all_seasons[all_seasons['SEASON'].str.contains('SS', na=False, case=False)].sort_values('SEASON', ascending=False).head(5)['SEASON'].tolist()
-            aw_seasons = all_seasons[all_seasons['SEASON'].str.contains('AW', na=False, case=False)].sort_values('SEASON', ascending=False).head(5)['SEASON'].tolist()
-            
-            def render_season_row(season_list, row_title):
-                if season_list:
-                    st.markdown(f"<div style='font-weight: bold; color: #333; font-size: 14px; margin-top: 10px; margin-bottom: 5px;'>▶ {row_title}</div>", unsafe_allow_html=True)
-                    cols = st.columns(5)
-                    for i, s_name in enumerate(season_list):
-                        cal_v = season_cal.loc[s_name, 'SALEVAL'] if s_name in season_cal.index else 0
-                        cal_q = season_cal.loc[s_name, 'QTY'] if s_name in season_cal.index else 0
-                        
-                        full_v = season_full.loc[s_name, 'SALEVAL'] if s_name in season_full.index else 0
-                        full_q = season_full.loc[s_name, 'QTY'] if s_name in season_full.index else 0
-                        
-                        if i < 5:
-                            with cols[i]:
-                                st.markdown(f"""
-                                <div style='background-color: #f8f9fa; padding: 6px; border-radius: 5px; border: 1px solid #e0e0e0; text-align: center; margin-bottom: 10px;'>
-                                    <div style='font-weight: bold; font-size: 14px; color: #d32f2f; border-bottom: 1px solid #ddd; padding-bottom: 2px; margin-bottom: 4px;'>{s_name.upper()}</div>
-                                    <div style='font-size: 11px; color: #666; font-weight: bold;'>📅 Cal: <span style='color:#1F4E79;'>{format_indian_num(cal_q, False)} Qty</span> | <span style='color:#2E7D32;'>{format_indian_num(cal_v, True)}</span></div>
-                                    <div style='font-size: 11px; color: #666; font-weight: bold; margin-top: 2px;'>🌍 Full: <span style='color:#1F4E79;'>{format_indian_num(full_q, False)} Qty</span> | <span style='color:#2E7D32;'>{format_indian_num(full_v, True)}</span></div>
-                                </div>
-                                """, unsafe_allow_html=True)
-
-            render_season_row(ss_seasons, "SPRING/SUMMER (SS) - Top 5 Latest")
-            render_season_row(aw_seasons, "AUTUMN/WINTER (AW) - Top 5 Latest")
+delta_disc_g_str = f"{(disc_pct_g_c - disc_pct_g_b):+.1f}% (LY: {disc_pct_g_b:.1f}%)" if compare_mode else None
+r1_c5.metric(label="Discount %", value=f"{disc_pct_g_c:.1f}%", delta=delta_disc_g_str, delta_color="inverse")
+if compare_mode: r1_c5.markdown(wrapper.format(disc_html), unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
-down_col1, down_col2, down_col3 = st.columns([1,2,1])
-with down_col2:
-    st.download_button("📥 DOWNLOAD YTD REPORT", data=to_excel(df_ytd_global), file_name="Report.xlsx", mime="application/vnd.ms-excel", use_container_width=True)
 
-# ==========================================
-# 🔥 MONTH-WISE RESTRUCTURED BREAKDOWN WITH ALL HISTORICAL YEARS INLINE
-# ==========================================
+days_ty = max(1, (ty_end_dt - ty_start_dt).days + 1)
+days_ly = max(1, (ly_end_dt - ly_start_dt).days + 1) if compare_mode else 1
+per_day_comp = s_comp / days_ty
+per_day_base = s_base / days_ly if compare_mode else 0
+
+months_ty = max(1, df_ytd_comp['MONTH_NAME'].nunique())
+months_ly = max(1, df_ytd_base['MONTH_NAME'].nunique()) if compare_mode else 1
+per_month_comp = s_comp / months_ty
+per_month_base = s_base / months_ly if compare_mode else 0
+
+per_day_qty_comp = q_comp / days_ty
+per_day_qty_base = q_base / days_ly if compare_mode else 0
+per_month_qty_comp = q_comp / months_ty
+per_month_qty_base = q_base / months_ly if compare_mode else 0
+
+pd_qty_gr = calc_growth(per_day_qty_base, per_day_qty_comp)
+pm_qty_gr = calc_growth(per_month_qty_base, per_month_qty_comp)
+
+exp_month_val = per_day_comp * 30
+exp_month_qty = per_day_qty_comp * 30
+exp_year_val = per_day_comp * 365
+exp_year_qty = per_day_qty_comp * 365
+
+pd_qty_str = format_indian_num(per_day_qty_comp, False)
+pd_qty_gr_html = ""
+if compare_mode and not pd.isna(pd_qty_gr):
+    fc = "#28a745" if pd_qty_gr >= 0 else "#dc3545"
+    pd_qty_gr_html = f" (<span style='color: {fc}; font-weight:bold;'>{pd_qty_gr:+.1f}%</span>)"
+
+col2_html = f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'><b>Avg Qty/Day:</b> {pd_qty_str}{pd_qty_gr_html}</div>"
+col2_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 12px; font-weight: bold;'>🎯 Exp. Month (30D):</div>"
+col2_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'>• Value: <b style='color:#2E7D32;'>{format_indian_num(exp_month_val, True)}</b></div>"
+col2_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'>• Qty: <b style='color:#1F4E79;'>{format_indian_num(exp_month_qty, False)}</b></div>"
+
+pm_qty_str = format_indian_num(per_month_qty_comp, False)
+pm_qty_gr_html = ""
+if compare_mode and not pd.isna(pm_qty_gr):
+    fc = "#28a745" if pm_qty_gr >= 0 else "#dc3545"
+    pm_qty_gr_html = f" (<span style='color: {fc}; font-weight:bold;'>{pm_qty_gr:+.1f}%</span>)"
+
+col3_html = f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'><b>Avg Qty/Month:</b> {pm_qty_str}{pm_qty_gr_html}</div>"
+col3_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 12px; font-weight: bold;'>🎯 Exp. Year (365D):</div>"
+col3_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'>• Value: <b style='color:#2E7D32;'>{format_indian_num(exp_year_val, True)}</b></div>"
+col3_html += f"<div style='font-size: 13.5px; color: #555; margin-top: 3px;'>• Qty: <b style='color:#1F4E79;'>{format_indian_num(exp_year_qty, False)}</b></div>"
+
+r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns(5)
+r2_c1.metric(label="Average Bill Value", value=format_indian_num(abv_comp, True), delta=f"{calc_growth(abv_base, abv_comp):.1f}% (LY: {format_indian_num(abv_base, True)})" if compare_mode else None)
+if compare_mode: r2_c1.markdown(wrapper.format(abv_html), unsafe_allow_html=True)
+
+r2_c2.metric(label="Per Day Avg Sale", value=format_indian_num(per_day_comp, True), delta=f"{calc_growth(per_day_base, per_day_comp):.1f}% (LY: {format_indian_num(per_day_base, True)})" if compare_mode else None)
+r2_c2.markdown(wrapper.format(col2_html), unsafe_allow_html=True)
+
+r2_c3.metric(label="Per Month Avg Sale", value=format_indian_num(per_month_comp, True), delta=f"{calc_growth(per_month_base, per_month_comp):.1f}% (LY: {format_indian_num(per_month_base, True)})" if compare_mode else None)
+r2_c3.markdown(wrapper.format(col3_html), unsafe_allow_html=True)
+
+r2_c4.metric(label="Average Qty Value", value=format_indian_num(aqv_comp, True), delta=f"{calc_growth(aqv_base, aqv_comp):.1f}% (LY: {format_indian_num(aqv_base, True)})" if compare_mode else None)
+if compare_mode: r2_c4.markdown(wrapper.format(aqv_html), unsafe_allow_html=True)
+
+r2_c5.metric(label="Unit Per Transaction", value=f"{upt_comp:.2f}", delta=f"{calc_growth(upt_base, upt_comp):.1f}% (LY: {upt_base:.2f})" if compare_mode else None)
+if compare_mode: r2_c5.markdown(wrapper.format(upt_html), unsafe_allow_html=True)
+
+if 'SEASON' in filtered_df.columns:
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("<div style='font-size: 16px; font-weight: bold; color: #1F4E79; margin-bottom: 10px;'>🌤️ Compact Season-wise Summary (Calendar vs Full Data)</div>", unsafe_allow_html=True)
+        season_cal = df_comp_kpi.groupby('SEASON').agg({'SALEVAL': 'sum', 'QTY': 'sum'})
+        season_full = filtered_df.groupby('SEASON').agg({'SALEVAL': 'sum', 'QTY': 'sum'})
+        all_seasons = pd.DataFrame({'SEASON': season_full.index})
+        ss_seasons = all_seasons[all_seasons['SEASON'].str.contains('SS', na=False, case=False)].sort_values('SEASON', ascending=False).head(5)['SEASON'].tolist()
+        aw_seasons = all_seasons[all_seasons['SEASON'].str.contains('AW', na=False, case=False)].sort_values('SEASON', ascending=False).head(5)['SEASON'].tolist()
+        
+        def render_season_row(season_list, row_title):
+            if season_list:
+                st.markdown(f"<div style='font-weight: bold; color: #333; font-size: 14px; margin-top: 10px; margin-bottom: 5px;'>▶ {row_title}</div>", unsafe_allow_html=True)
+                cols = st.columns(5)
+                for i, s_name in enumerate(season_list):
+                    cal_v = season_cal.loc[s_name, 'SALEVAL'] if s_name in season_cal.index else 0
+                    cal_q = season_cal.loc[s_name, 'QTY'] if s_name in season_cal.index else 0
+                    full_v = season_full.loc[s_name, 'SALEVAL'] if s_name in season_full.index else 0
+                    full_q = season_full.loc[s_name, 'QTY'] if s_name in season_full.index else 0
+                    if i < 5:
+                        with cols[i]:
+                            st.markdown(f"<div style='background-color: #f8f9fa; padding: 6px; border-radius: 5px; border: 1px solid #e0e0e0; text-align: center; margin-bottom: 10px;'><div style='font-weight: bold; font-size: 14px; color: #d32f2f; border-bottom: 1px solid #ddd; padding-bottom: 2px; margin-bottom: 4px;'>{s_name.upper()}</div><div style='font-size: 11px; color: #666; font-weight: bold;'>📅 Cal: <span style='color:#1F4E79;'>{format_indian_num(cal_q, False)} Qty</span> | <span style='color:#2E7D32;'>{format_indian_num(cal_v, True)}</span></div><div style='font-size: 11px; color: #666; font-weight: bold; margin-top: 2px;'>🌍 Full: <span style='color:#1F4E79;'>{format_indian_num(full_q, False)} Qty</span> | <span style='color:#2E7D32;'>{format_indian_num(full_v, True)}</span></div></div>", unsafe_allow_html=True)
+
+        render_season_row(ss_seasons, "SPRING/SUMMER (SS) - Top 5 Latest")
+        render_season_row(aw_seasons, "AUTUMN/WINTER (AW) - Top 5 Latest")
+
 st.markdown("---")
 st.markdown(f"### 📅 Month-wise Analytics Breakdown")
+if not df_ytd_comp.empty: active_months_in_data = df_ytd_comp.sort_values('BILLDATE')['MONTH_NAME'].unique().tolist()
+else: active_months_in_data = []
 
-if not df_ytd_comp.empty:
-    active_months_in_data = df_ytd_comp.sort_values('BILLDATE')['MONTH_NAME'].unique().tolist()
-else:
-    active_months_in_data = []
-
-if not active_months_in_data:
-    st.info("No data available for the selected period.")
+if not active_months_in_data: st.info("No data available for the selected period.")
 else:
     for m_name in active_months_in_data:
         st.markdown(f"#### 🔹 {m_name.upper()} SUMMARY")
-        
         df_m_c = df_ytd_comp[df_ytd_comp['MONTH_NAME'] == m_name]
         df_m_b = df_ytd_base[df_ytd_base['MONTH_NAME'] == m_name] if compare_mode else pd.DataFrame()
-        
-        s_c = df_m_c['SALEVAL'].sum()
-        q_c = df_m_c['QTY'].sum()
+        s_c, q_c = df_m_c['SALEVAL'].sum(), df_m_c['QTY'].sum()
         b_c = df_m_c['UNIQUE_BILL_ID'].nunique() if 'UNIQUE_BILL_ID' in df_m_c.columns else 0
-        asp_c = s_c / b_c if b_c > 0 else 0
-        upt_c = q_c / b_c if b_c > 0 else 0
+        asp_c, upt_c = (s_c / b_c if b_c > 0 else 0), (q_c / b_c if b_c > 0 else 0)
         
-        s_b = df_m_b['SALEVAL'].sum() if not df_m_b.empty else 0
-        q_b = df_m_b['QTY'].sum() if not df_m_b.empty else 0
+        s_b, q_b = df_m_b['SALEVAL'].sum() if not df_m_b.empty else 0, df_m_b['QTY'].sum() if not df_m_b.empty else 0
         b_b = df_m_b['UNIQUE_BILL_ID'].nunique() if (not df_m_b.empty and 'UNIQUE_BILL_ID' in df_m_b.columns) else 0
-        asp_b = s_b / b_b if b_b > 0 else 0
-        upt_b = q_b / b_b if b_b > 0 else 0
+        asp_b, upt_b = (s_b / b_b if b_b > 0 else 0), (q_b / b_b if b_b > 0 else 0)
         
         if selected_disc_col:
             disc_c = abs(df_m_c[selected_disc_col].sum())
             disc_b = abs(df_m_b[selected_disc_col].sum()) if (compare_mode and not df_m_b.empty) else 0
-        else:
-            disc_c, disc_b = 0, 0
+        else: disc_c, disc_b = 0, 0
             
-        gross_c = abs(s_c) + disc_c
-        gross_b = abs(s_b) + disc_b
-
-        disc_pct_c = (disc_c / gross_c * 100) if gross_c > 0 else 0
-        disc_pct_b = (disc_b / gross_b * 100) if gross_b > 0 else 0
+        gross_c, gross_b = abs(s_c) + disc_c, abs(s_b) + disc_b
+        disc_pct_c, disc_pct_b = (disc_c / gross_c * 100) if gross_c > 0 else 0, (disc_b / gross_b * 100) if gross_b > 0 else 0
         
         df_m_all = filtered_df[filtered_df['MONTH_NAME'] == m_name]
         m_agg = {'SALEVAL': 'sum', 'QTY': 'sum'}
@@ -886,26 +696,19 @@ else:
         m_hist = df_m_all.groupby('FY_YEAR').agg(m_agg).sort_index(ascending=False)
         m_hist.rename(columns={'UNIQUE_BILL_ID': 'BILLS'}, inplace=True)
         if 'BILLS' not in m_hist.columns: m_hist['BILLS'] = 0
-        
         if selected_disc_col: m_hist['DISC'] = df_m_all.groupby('FY_YEAR')[selected_disc_col].apply(lambda x: abs(x.sum()))
         else: m_hist['DISC'] = 0
             
-        m_hist['SALE_LY'] = m_hist['SALEVAL'].shift(-1)
-        m_hist['QTY_LY'] = m_hist['QTY'].shift(-1)
-        m_hist['BILLS_LY'] = m_hist['BILLS'].shift(-1)
-        
+        m_hist['SALE_LY'], m_hist['QTY_LY'], m_hist['BILLS_LY'] = m_hist['SALEVAL'].shift(-1), m_hist['QTY'].shift(-1), m_hist['BILLS'].shift(-1)
         m_hist['Sale Gr(%)'] = calc_growth_series(m_hist['SALE_LY'], m_hist['SALEVAL'])
         m_hist['Qty Gr(%)'] = calc_growth_series(m_hist['QTY_LY'], m_hist['QTY'])
         m_hist['Bills Gr(%)'] = calc_growth_series(m_hist['BILLS_LY'], m_hist['BILLS'])
-        
         m_hist['ASP'] = m_hist['SALEVAL'] / m_hist['BILLS'].replace(0, np.nan)
         m_hist['ASP_LY'] = m_hist['SALE_LY'] / m_hist['BILLS_LY'].replace(0, np.nan)
         m_hist['ASP Gr(%)'] = calc_growth_series(m_hist['ASP_LY'], m_hist['ASP'])
-        
         m_hist['UPT'] = m_hist['QTY'] / m_hist['BILLS'].replace(0, np.nan)
         m_hist['UPT LY'] = m_hist['QTY_LY'] / m_hist['BILLS_LY'].replace(0, np.nan)
         m_hist['UPT Gr(%)'] = calc_growth_series(m_hist['UPT LY'], m_hist['UPT'])
-        
         m_hist['Gross'] = m_hist['SALEVAL'].abs() + m_hist['DISC']
         m_hist['Discount %'] = (m_hist['DISC'] / m_hist['Gross'] * 100).fillna(0)
         m_hist['Discount % LY'] = m_hist['Discount %'].shift(-1)
@@ -943,24 +746,20 @@ else:
                 cat_agg_ty = df_m_c.groupby('CATEGORY').agg({'SALEVAL': 'sum', 'QTY': 'sum'})
                 cat_agg_ly = df_m_b.groupby('CATEGORY').agg({'SALEVAL': 'sum', 'QTY': 'sum'}) if compare_mode and not df_m_b.empty else pd.DataFrame()
                 top_cats = cat_agg_ty.sort_values(by='SALEVAL', ascending=False).head(5)
-                
                 if len(top_cats) > 0:
                     cat_cols = st.columns(5)
                     for i, (cat_name, row) in enumerate(top_cats.iterrows()):
-                        ty_val = row['SALEVAL']
-                        ty_qty = row['QTY']
+                        ty_val, ty_qty = row['SALEVAL'], row['QTY']
                         ly_val = cat_agg_ly.loc[cat_name, 'SALEVAL'] if (compare_mode and cat_name in cat_agg_ly.index) else 0
                         ly_qty = cat_agg_ly.loc[cat_name, 'QTY'] if (compare_mode and cat_name in cat_agg_ly.index) else 0
-                        delta_str_v = f"{calc_growth(ly_val, ty_val):.1f}% (LY: {format_indian_num(ly_val, True)})" if compare_mode else None
-                        delta_str_q = f"{calc_growth(ly_qty, ty_qty):.1f}% (LY: {format_indian_num(ly_qty, False)})" if compare_mode else None
                         with cat_cols[i]:
-                            st.metric(label=f"🛍️ {cat_name} (Val)", value=format_indian_num(ty_val, True), delta=delta_str_v)
-                            st.metric(label=f"📦 {cat_name} (Qty)", value=format_indian_num(ty_qty, False), delta=delta_str_q)
+                            st.metric(label=f"🛍️ {cat_name} (Val)", value=format_indian_num(ty_val, True), delta=f"{calc_growth(ly_val, ty_val):.1f}%" if compare_mode else None)
+                            st.metric(label=f"📦 {cat_name} (Qty)", value=format_indian_num(ty_qty, False), delta=f"{calc_growth(ly_qty, ty_qty):.1f}%" if compare_mode else None)
             
 st.markdown("---")
 
 # ==========================================
-# 📅 TABS RENDERING ROUTERS (ADMIN CONTROLLED)
+# 📊 DYNAMIC TAB SYSTEM (Rights Controlled)
 # ==========================================
 MASTER_TABS = [
     "📅 Selected Range Analytics Summary", "📊 Analytics Summary", "🚀 Store Growth Deep-Dive", 
@@ -970,31 +769,19 @@ MASTER_TABS = [
 ]
 
 visible_tabs = [t for t in MASTER_TABS if check_tab_access(t)]
-if st.session_state.selected_user == "GOD (ADMIN)":
-    visible_tabs.append("⚙️ Admin Control Panel")
+if st.session_state.selected_user == "GOD (ADMIN)": visible_tabs.append("⚙️ Admin Control Panel")
 
 rendered_tabs = st.tabs(visible_tabs)
 tab_dict = dict(zip(visible_tabs, rendered_tabs))
 
 def make_professional_chart(fig, title_text, is_pie=False):
-    fig.update_layout(
-        title={'text': title_text, 'font': {'size': 22, 'family': 'Arial', 'weight': 'bold'}, 'x': 0.02},
-        font=dict(size=16, color='#333333'),
-        template='plotly_white',
-        margin=dict(l=10, r=220, t=85, b=45) if is_pie else dict(l=55, r=25, t=85, b=45),
-        xaxis=dict(tickfont=dict(size=14), title_font=dict(size=16, weight='bold'), tickformat='.0f'),
-        yaxis=dict(tickfont=dict(size=14), title_font=dict(size=16, weight='bold'), tickformat='.0f')
-    )
-    if is_pie:
-        fig.update_layout(showlegend=True, legend=dict(font=dict(size=12), orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02))
-    else:
-        fig.update_layout(legend=dict(font=dict(size=13), orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        fig.update_traces(textposition='outside', textfont=dict(size=13, weight='bold'))
+    fig.update_layout(title={'text': title_text, 'font': {'size': 22, 'family': 'Arial', 'weight': 'bold'}, 'x': 0.02}, font=dict(size=16, color='#333333'), template='plotly_white', margin=dict(l=10, r=220, t=85, b=45) if is_pie else dict(l=55, r=25, t=85, b=45), xaxis=dict(tickfont=dict(size=14), title_font=dict(size=16, weight='bold'), tickformat='.0f'), yaxis=dict(tickfont=dict(size=14), title_font=dict(size=16, weight='bold'), tickformat='.0f'))
+    if is_pie: fig.update_layout(showlegend=True, legend=dict(font=dict(size=12), orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02))
+    else: fig.update_layout(legend=dict(font=dict(size=13), orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)); fig.update_traces(textposition='outside', textfont=dict(size=13, weight='bold'))
     return fig
 
 def render_analytics(df_source, tab_key_prefix, is_ytd=False):
     plot_df = df_source[df_source['YEAR2'].isin([base_y, comp_y])].copy()
-    
     if not plot_df.empty: m_seq = plot_df.sort_values('BILLDATE')['MONTH_NAME'].unique().tolist()
     else: m_seq = m_sequence
 
@@ -1037,9 +824,7 @@ def render_analytics(df_source, tab_key_prefix, is_ytd=False):
             
     c_b1, c_b2 = st.columns(2)
     cust_bot_sort = cust_sum_df.sort_values(by='VALUE', ascending=True).reset_index(drop=True)
-    
-    red_palette_1 = ['#E53935', '#EF5350', '#E57373', '#EF9A9A', '#FFCDD2']
-    red_palette_2 = ['#B71C1C', '#C62828', '#D32F2F', '#E53935', '#EF5350']
+    red_palette_1, red_palette_2 = ['#E53935', '#EF5350', '#E57373', '#EF9A9A', '#FFCDD2'], ['#B71C1C', '#C62828', '#D32F2F', '#E53935', '#EF5350']
 
     with c_b1:
         if not cust_bot_sort.head(5).empty and s_tot > 0:
@@ -1110,10 +895,9 @@ def render_analytics(df_source, tab_key_prefix, is_ytd=False):
     render_dimension_twins('EOSS/FRESH', 9)
     render_dimension_twins('FORMAL/CASUAL', 10)
 
-
-# ==========================================
-# 📌 TAB CONTENTS RENDERING
-# ==========================================
+# ----------------------------------------------------
+# 📌 TAB IMPLEMENTATIONS
+# ----------------------------------------------------
 if "📅 Selected Range Analytics Summary" in tab_dict:
     with tab_dict["📅 Selected Range Analytics Summary"]:
         st.markdown(f"#### 📢 **PLEASE NOTE: This data is filtered based on Selected Date Range**")
@@ -1128,7 +912,7 @@ if "📊 Analytics Summary" in tab_dict:
 if "🚀 Store Growth Deep-Dive" in tab_dict:
     with tab_dict["🚀 Store Growth Deep-Dive"]:
         if not compare_mode:
-            st.info("⚠️ YoY Growth Analytics tab is disabled because **Comparison Mode** is OFF. Please enable it from the sidebar to view these insights.")
+            st.info("⚠️ YoY Growth Analytics tab is disabled because **Comparison Mode** is OFF.")
         else:
             st.markdown("### 💰 1. Value Wise Growth Performance Summary")
             df_sg_val = pd.concat([df_comp_kpi, df_base_kpi]).pivot_table(index='CUSTOMERNAMEACTIVE', columns='YEAR2', values='SALEVAL', aggfunc='sum', fill_value=0).reset_index()
@@ -1152,12 +936,10 @@ if "🚀 Store Growth Deep-Dive" in tab_dict:
                 with v_col3:
                     fig_all_v_pos = px.bar(df_pos_val, x='CUSTOMERNAMEACTIVE', y='GROWTH_PCT', title="All Growing Stores (Value)", color_discrete_sequence=['#4CAF50'])
                     fig_all_v_pos.update_traces(texttemplate='%{y:+.0f}%', textposition='outside')
-                    fig_all_v_pos.update_layout(xaxis=dict(tickmode='linear', dtick=1, tickangle=-45), height=550)
                     st.plotly_chart(make_professional_chart(fig_all_v_pos, "All Growing Stores (Value)"), use_container_width=True, key="growth_val_3")
                 with v_col4:
                     fig_all_v_neg = px.bar(df_neg_val, x='CUSTOMERNAMEACTIVE', y='GROWTH_PCT', title="All Degrowing Stores (Value)", color_discrete_sequence=['#D32F2F'])
                     fig_all_v_neg.update_traces(texttemplate='%{y:.0f}%', textposition='outside')
-                    fig_all_v_neg.update_layout(xaxis=dict(tickmode='linear', dtick=1, tickangle=-45), height=550)
                     st.plotly_chart(make_professional_chart(fig_all_v_neg, "All Degrowing Stores (Value)"), use_container_width=True, key="growth_val_4")
 
             st.markdown("---")
@@ -1183,12 +965,10 @@ if "🚀 Store Growth Deep-Dive" in tab_dict:
                 with q_col3:
                     fig_all_q_pos = px.bar(df_pos_val, x='CUSTOMERNAMEACTIVE', y='GROWTH_PCT', title="All Growing Stores (Qty)", color_discrete_sequence=['#2196F3'])
                     fig_all_q_pos.update_traces(texttemplate='%{y:+.0f}%', textposition='outside')
-                    fig_all_q_pos.update_layout(xaxis=dict(tickmode='linear', dtick=1, tickangle=-45), height=550)
                     st.plotly_chart(make_professional_chart(fig_all_q_pos, "All Growing Stores (Qty)"), use_container_width=True, key="growth_qty_3")
                 with q_col4:
                     fig_all_q_neg = px.bar(df_neg_qty, x='CUSTOMERNAMEACTIVE', y='GROWTH_PCT', title="All Degrowing Stores (Qty)", color_discrete_sequence=['#E53935'])
                     fig_all_q_neg.update_traces(texttemplate='%{y:.0f}%', textposition='outside')
-                    fig_all_q_neg.update_layout(xaxis=dict(tickmode='linear', dtick=1, tickangle=-45), height=550)
                     st.plotly_chart(make_professional_chart(fig_all_q_neg, "All Degrowing Stores (Qty)"), use_container_width=True, key="growth_qty_4")
 
 if "📈 YoY Growth" in tab_dict:
@@ -1840,12 +1620,20 @@ if "🚀 Advanced Analytics" in tab_dict:
                 map_df = map_df.dropna(subset=['LAT', 'LON'])
                 if not map_df.empty:
                     map_df['Hover Text'] = map_df.apply(lambda row: f"State: {row['STATE']}<br>Sale: {format_indian_num(row['SALEVAL'], True)}<br>Qty: {format_indian_num(row['QTY'], False)}", axis=1)
-                    fig_map = px.scatter_mapbox(
-                        map_df, lat="LAT", lon="LON", size="SALEVAL", color="SALEVAL", 
-                        hover_name="STATE", hover_data={"LAT": False, "LON": False, "SALEVAL": False}, 
-                        text="Hover Text", color_continuous_scale=px.colors.sequential.Teal, 
-                        size_max=40, zoom=3.5, center={"lat": 22.0, "lon": 79.0}, mapbox_style="open-street-map"
-                    )
+                    try:
+                        fig_map = px.scatter_map(
+                            map_df, lat="LAT", lon="LON", size="SALEVAL", color="SALEVAL", 
+                            hover_name="STATE", hover_data={"LAT": False, "LON": False, "SALEVAL": False}, 
+                            text="Hover Text", color_continuous_scale=px.colors.sequential.Teal, 
+                            size_max=40, zoom=3.5, map_style="open-street-map"
+                        )
+                    except AttributeError:
+                        fig_map = px.scatter_mapbox(
+                            map_df, lat="LAT", lon="LON", size="SALEVAL", color="SALEVAL", 
+                            hover_name="STATE", hover_data={"LAT": False, "LON": False, "SALEVAL": False}, 
+                            text="Hover Text", color_continuous_scale=px.colors.sequential.Teal, 
+                            size_max=40, zoom=3.5, mapbox_style="open-street-map"
+                        )
                     fig_map.update_traces(hovertemplate="%{text}")
                     min_sale_val_m, max_sale_val_m = map_df['SALEVAL'].min(), map_df['SALEVAL'].max()
                     tick_v = np.linspace(min_sale_val_m, max_sale_val_m, num=5)
@@ -1960,7 +1748,6 @@ if "🚀 Advanced Analytics" in tab_dict:
             report_email = st.text_input("Enter Boss/Manager Email ID:", "manager@company.com")
             if st.button("🚀 Trigger Management Email Report", type="primary"):
                 with st.spinner("Compiling insights and generating report..."):
-                    import time
                     time.sleep(1.5)
                     top_store_name = "N/A"
                     if 'CUSTOMERNAMEACTIVE' in df_comp_kpi.columns and not df_comp_kpi.empty:
@@ -2001,18 +1788,18 @@ if "⚙️ Admin Control Panel" in tab_dict:
         current_feat_raw = users_df_current.loc[users_df_current['Username'] == user_to_edit, 'Allowed_Features'].values[0]
         
         all_cols_list = list(sheet_data.columns)
-        all_features_list = ["File Upload Feature", "File Selector", "Data View Selector", "Compare LY Toggle", "Quick Range Preset", "Reload Data Button", "PDF Export Button"]
+        all_features_list = ["File Upload Feature", "File Selector", "Compare LY Toggle", "Quick Range Preset", "Reload Cache Button", "PDF Export Button"]
         
         def_cols = all_cols_list if pd.isna(current_cols_raw) or current_cols_raw == "ALL" else [c.strip() for c in current_cols_raw.split(",") if c.strip() in all_cols_list]
         def_tabs = MASTER_TABS if pd.isna(current_tabs_raw) or current_tabs_raw == "ALL" else [t.strip() for t in current_tabs_raw.split(",") if t.strip() in MASTER_TABS]
         def_feat = all_features_list if pd.isna(current_feat_raw) or current_feat_raw == "ALL" else [f.strip() for f in current_feat_raw.split(",") if f.strip() in all_features_list]
 
         a_col1, a_col2, a_col3 = st.columns(3)
-        with a_col1: selected_col_rights = st.multiselect("👁️ Permitted Mega-Ledger Columns:", all_cols_list, default=def_cols)
+        with a_col1: selected_col_rights = st.multiselect("👁️ Permitted Headers (Mega Ledger):", all_cols_list, default=def_cols)
         with a_col2: selected_tab_rights = st.multiselect("📂 Permitted Dashboard Tabs:", MASTER_TABS, default=def_tabs)
         with a_col3: selected_feat_rights = st.multiselect("⚙️ Permitted Global Features:", all_features_list, default=def_feat)
         
-        if st.button("💾 Enforce Security Settings", type="primary", use_container_width=True):
+        if st.button("💾 Enforce Security Settings (Save)", type="primary", use_container_width=True):
             final_db = edited_df.copy()
             final_db = final_db.merge(users_df_current[['Username', 'Allowed_Columns', 'Allowed_Tabs', 'Allowed_Features']], on='Username', how='left')
             
@@ -2023,3 +1810,26 @@ if "⚙️ Admin Control Panel" in tab_dict:
             final_db.to_csv("users_db.csv", index=False)
             st.success("🎉 Global Security & Access Rules Updated Successfully! (Refresh Dashboard to apply changes)")
             st.balloons()
+            time.sleep(2)
+            st.rerun()
+
+        st.markdown("---")
+        st.markdown("### 💬 User Suggestions & Feedback Viewer")
+        try:
+            sug_df = get_suggestions_db()
+            if sug_df.empty:
+                st.info("Abhi tak kisi user ne koi suggestion nahi bheja hai.")
+            else:
+                for idx, row in sug_df.iterrows():
+                    with st.expander(f"📬 [{row['Date']}] {row['Username']} - {str(row['Suggestion'])[:30]}...", expanded=False):
+                        st.markdown(f"**Suggestion:** {row['Suggestion']}")
+                        st.caption(f"From: {row['Username']} | Date: {row['Date']}")
+                        
+                        reply_text = st.text_input(f"Reply to {row['Username']}:", value=row['Admin_Reply'], key=f"reply_{row['ID']}")
+                        if st.button("📤 Send Reply", key=f"btn_{row['ID']}"):
+                            save_admin_reply(row['ID'], reply_text)
+                            st.success("✅ Reply sent to user!")
+                            time.sleep(1)
+                            st.rerun()
+        except Exception as e:
+            st.error("Feedback load karne mein error aaya.")
